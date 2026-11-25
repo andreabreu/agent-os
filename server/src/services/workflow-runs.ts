@@ -1,5 +1,6 @@
+import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq } from "drizzle-orm";
-import { agents, cases, issues, workflowRunEvents, workflowRunSteps, workflowRuns, workflowVersions, workflows, type Db } from "@paperclipai/db";
+import { agents, cases, companyMemberships, issues, workflowRunEvents, workflowRunSteps, workflowRuns, workflowVersions, workflows, type Db } from "@paperclipai/db";
 import {
   WORKFLOW_RUN_STATE_UNSUPPORTED_CODE,
   WORKFLOW_RUN_STATE_VERSION,
@@ -97,6 +98,65 @@ export function buildStepInstructions(input: {
     `Finish with POST /api/workflow-runs/${input.runId}/steps/${step.key}/complete and one outcome: `
       + `${step.outcomes.map((outcome) => outcome.key).join(", ")}. Do not hand the case off yourself.`,
   ].filter((line): line is string => Boolean(line)).join("\n\n");
+}
+
+/** Whether a version can be started by a run right now, without throwing. */
+export async function isRunnableVersion(db: Db, companyId: string, spec: WorkflowSpec) {
+  try {
+    await assertRunnable(db, companyId, spec);
+    return findStep(spec, spec.start).type === "agent_task";
+  } catch {
+    return false;
+  }
+}
+
+async function responsibleUserActor(db: Db, companyId: string, userId: string): Promise<AuthorizationActor | null> {
+  const [membership] = await db.select({ companyId: companyMemberships.companyId, membershipRole: companyMemberships.membershipRole,
+    status: companyMemberships.status }).from(companyMemberships).where(and(eq(companyMemberships.companyId, companyId),
+    eq(companyMemberships.principalType, "user"), eq(companyMemberships.principalId, userId), eq(companyMemberships.status, "active")));
+  return membership ? { type: "board", userId, companyIds: [companyId], memberships: [membership], source: "session" } : null;
+}
+
+/**
+ * Starts a run for a routine dispatch: the task the routine just created becomes the primary task of a new case,
+ * handed to the first step's agent, on behalf of the routine's responsible person.
+ * @throws when the routine has no active responsible person or the handoff is refused; the caller then wakes the task as before
+ */
+export async function startWorkflowRunFromRoutine(db: Db, input: {
+  companyId: string; workflowId: string; versionId: string; issueId: string; routineRunId: string; responsibleUserId: string | null;
+}) {
+  if (!input.responsibleUserId) throw unprocessable("The routine has no responsible person to start the workflow for");
+  const actor = await responsibleUserActor(db, input.companyId, input.responsibleUserId);
+  if (!actor) throw forbidden("The routine's responsible person is no longer an active member");
+  const [workflow] = await db.select().from(workflows).where(eq(workflows.id, input.workflowId));
+  const [version] = await db.select().from(workflowVersions).where(eq(workflowVersions.id, input.versionId));
+  const [task] = await db.select().from(issues).where(eq(issues.id, input.issueId));
+  const spec = workflowSpecSchema.parse(version!.spec);
+  const firstStep = findStep(spec, spec.start);
+  const runId = randomUUID();
+  const handoff = await caseHandoffService(db).handoff(input.companyId, actor, {
+    idempotencyKey: `workflow-routine:${input.routineRunId}`,
+    case: { create: { caseType: "workflow", title: task!.title, summary: `Started by routine run of workflow "${workflow!.name}"` } },
+    bindIssueId: task!.id,
+    expectedIssueStatusVersion: task!.statusVersion,
+    toAgentId: firstStep.owner.ref,
+    phase: firstStep.key,
+    instructions: buildStepInstructions({ workflowName: workflow!.name, version: version!.version, runId, spec, step: firstStep, attempt: 1 }),
+    workflowId: workflow!.id,
+  });
+  await writeWithActivity(db, async (tx, publications) => {
+    await tx.insert(workflowRuns).values({ id: runId, companyId: input.companyId, workflowId: workflow!.id, versionId: version!.id,
+      caseId: handoff.caseId, status: "running", responsibleUserId: input.responsibleUserId, origin: "routine",
+      routineRunId: input.routineRunId, currentStepKey: firstStep.key });
+    await tx.insert(workflowRunSteps).values({ runId, companyId: input.companyId, stepKey: firstStep.key, attempt: 1,
+      status: "running", assigneeAgentId: firstStep.owner.ref, handoffId: handoff.handoffId });
+    await tx.insert(workflowRunEvents).values({ runId, companyId: input.companyId, eventKey: "started", kind: "started",
+      actorType: "user", actorId: input.responsibleUserId, payload: { versionId: version!.id, version: version!.version, routineRunId: input.routineRunId } });
+    publications.push((await persistActivity(tx, { companyId: input.companyId, ...runActivityActor(actor), runId: null,
+      action: "workflow_run.started", entityType: "workflow_run", entityId: runId,
+      details: { workflowId: workflow!.id, versionId: version!.id, caseId: handoff.caseId, origin: "routine", routineRunId: input.routineRunId } })).publication);
+  });
+  return runId;
 }
 
 async function assertRunnable(db: Db, companyId: string, spec: WorkflowSpec) {

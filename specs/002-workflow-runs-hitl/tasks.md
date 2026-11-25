@@ -177,12 +177,12 @@ Monorepo pnpm: `packages/db`, `packages/shared`, `server`. Sem UI nesta fase. Ar
 
 ### Tests for User Story 5
 
-- [ ] T049 [P] [US5] Criar `server/src/__tests__/workflow-runs-routine.integration.test.ts` (banco real) cobrindo: disparo por `schedule`, `webhook` e `api` cria case e run presos à versão mais recente com o dono da rotina como responsável; mesma entrega externa duas vezes cria um run; run ativo da rotina segue a política `coalesce_if_active`; versão sem etapas executáveis cria só a tarefa como na spec 001; sem versão publicada ou arquivado falha o run da rotina sem criar nada; `heartbeat` não é afetado
+- [X] T049 [P] [US5] Criar `server/src/__tests__/workflow-runs-routine.integration.test.ts` (banco real) cobrindo: disparo por `schedule`, `webhook` e `api` cria case e run presos à versão mais recente com o dono da rotina como responsável; mesma entrega externa duas vezes cria um run; run ativo da rotina segue a política `coalesce_if_active`; versão sem etapas executáveis cria só a tarefa como na spec 001; sem versão publicada ou arquivado falha o run da rotina sem criar nada; `heartbeat` não é afetado
 
 ### Implementation for User Story 5
 
-- [ ] T050 [US5] Em `server/src/services/workflow-routine-targets.ts`, estender `resolveWorkflowForDispatch` com a decisão "executável"; criar `startRunFromRoutine` em `server/src/services/workflow-runs.ts` (cria o case e o run numa transação, `origin = routine`, `routine_run_id`); em `server/src/services/routines.ts`, no ponto de extensão da spec 001, chamar `startRunFromRoutine` quando a versão for executável e manter o comportamento atual caso contrário
-- [ ] T051 [US5] Rodar T049 e `pnpm exec vitest run server/src/__tests__/routine-workflow-target.integration.test.ts server/src/__tests__/routines*.test.ts`; tudo verde
+- [X] T050 [US5] (Feito: `executable` no alvo, `startWorkflowRunFromRoutine`; se o run não puder começar, por exemplo quando o responsável deixou de ser membro ativo, a rotina acorda a tarefa como antes e registra o motivo no log) Em `server/src/services/workflow-routine-targets.ts`, estender `resolveWorkflowForDispatch` com a decisão "executável"; criar `startRunFromRoutine` em `server/src/services/workflow-runs.ts` (cria o case e o run numa transação, `origin = routine`, `routine_run_id`); em `server/src/services/routines.ts`, no ponto de extensão da spec 001, chamar `startRunFromRoutine` quando a versão for executável e manter o comportamento atual caso contrário
+- [X] T051 [US5] Rodar T049 e `pnpm exec vitest run server/src/__tests__/routine-workflow-target.integration.test.ts server/src/__tests__/routines*.test.ts`; tudo verde
 
 ---
 

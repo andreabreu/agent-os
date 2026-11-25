@@ -4,6 +4,8 @@ import { conflict, notFound } from "../errors.js";
 import { instanceSettingsService } from "./instance-settings.js";
 import { requireWorkflowVersionsEnabled } from "./workflow-versions.js";
 import { persistActivity, publishActivity, type ActivityPublication } from "./activity-log.js";
+import { isRunnableVersion } from "./workflow-runs.js";
+import { workflowSpecSchema } from "@paperclipai/shared";
 import type { AuthorizationActor } from "./authorization.js";
 
 export type WorkflowDispatch =
@@ -17,6 +19,8 @@ export type WorkflowDispatch =
     version: number;
     descriptionAppendix: string;
     payload: { workflowId: string; workflowVersionId: string; workflowVersion: number };
+    /** The version can start a run: the routine then creates a case and a run instead of only a task. */
+    executable: boolean;
   };
 
 function activityActor(actor: AuthorizationActor) {
@@ -43,7 +47,7 @@ export async function resolveWorkflowForDispatch(db: Db, routine: { id: string; 
   if (!workflow) return { status: "error", message: "The routine's workflow no longer exists" };
   if (workflow.status === "archived") return { status: "error", message: `Workflow "${workflow.name}" is archived` };
   if (!workflow.latestVersionId) return { status: "error", message: `Workflow "${workflow.name}" has no published version` };
-  const [version] = await db.select({ id: workflowVersions.id, version: workflowVersions.version }).from(workflowVersions)
+  const [version] = await db.select({ id: workflowVersions.id, version: workflowVersions.version, spec: workflowVersions.spec }).from(workflowVersions)
     .where(eq(workflowVersions.id, workflow.latestVersionId));
   if (!version) return { status: "error", message: `Workflow "${workflow.name}" has no published version` };
   return {
@@ -55,6 +59,7 @@ export async function resolveWorkflowForDispatch(db: Db, routine: { id: string; 
     descriptionAppendix: `Workflow: ${workflow.name} (version ${version.version}, id ${version.id}). `
       + "Read it with GET /api/workflows/" + workflow.id + "/versions/" + version.version + ".",
     payload: { workflowId: workflow.id, workflowVersionId: version.id, workflowVersion: version.version },
+    executable: await isRunnableVersion(db, routine.companyId, workflowSpecSchema.parse(version.spec)),
   };
 }
 

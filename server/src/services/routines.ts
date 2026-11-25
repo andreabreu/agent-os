@@ -83,6 +83,7 @@ import { getSecretProvider } from "../secrets/provider-registry.js";
 import { parseCron, validateCron } from "./cron.js";
 import { heartbeatService } from "./heartbeat.js";
 import { resolveWorkflowForDispatch } from "./workflow-routine-targets.js";
+import { startWorkflowRunFromRoutine } from "./workflow-runs.js";
 import { finalizeRoutineRun, routineExecutionStatusService, syncRoutineRunStatusForIssue } from "./routine-run-status.js";
 import {
   instanceSettingsService,
@@ -1867,6 +1868,8 @@ export function routineService(
       title,
       description,
     });
+    const startsWorkflowRun = workflowDispatch.status === "ready" && workflowDispatch.executable;
+    let deferredAssignmentWakeup: Parameters<typeof queueIssueAssignmentWakeup>[0] | null = null;
     const idempotentRunId = input.routineIdempotency && input.idempotencyKey
       ? routineScopedRunId(input.routine.id, input.source, input.idempotencyKey) : null;
     let reusedExistingRun = false;
@@ -2079,7 +2082,7 @@ export function routineService(
         }
 
         // Keep the dispatch lock until the issue is linked to a queued heartbeat run.
-        await queueIssueAssignmentWakeup({
+        const assignmentWakeup: Parameters<typeof queueIssueAssignmentWakeup>[0] = {
           heartbeat,
           issue: createdIssue,
           reason: "issue_assigned",
@@ -2090,7 +2093,9 @@ export function routineService(
           requestedByActorId: interactionActorAgentId ?? input.actor?.userId ?? null,
           requestedByActorCompanyId: interactionActorCompanyId,
           rethrowOnError: true,
-        });
+        };
+        if (startsWorkflowRun) deferredAssignmentWakeup = { ...assignmentWakeup, rethrowOnError: false };
+        else await queueIssueAssignmentWakeup(assignmentWakeup);
         const updated = await finalizeRun(createdRun.id, {
           status: "issue_created",
           linkedIssueId: createdIssue.id,
@@ -2127,6 +2132,16 @@ export function routineService(
         return failed ?? createdRun;
       }
     });
+
+    if (deferredAssignmentWakeup && workflowDispatch.status === "ready" && run.linkedIssueId) {
+      try {
+        await startWorkflowRunFromRoutine(db, { companyId: input.routine.companyId, workflowId: workflowDispatch.workflowId,
+          versionId: workflowDispatch.versionId, issueId: run.linkedIssueId, routineRunId: run.id, responsibleUserId: run.responsibleUserId });
+      } catch (error) {
+        logger.warn({ err: error, routineId: input.routine.id, runId: run.id }, "routine could not start its workflow run; waking its task instead");
+        await queueIssueAssignmentWakeup(deferredAssignmentWakeup);
+      }
+    }
 
     if (!reusedExistingRun && (input.source === "schedule" || input.source === "webhook")) {
       const actorId = input.source === "schedule" ? "routine-scheduler" : "routine-webhook";
