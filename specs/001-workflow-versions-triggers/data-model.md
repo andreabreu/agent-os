@@ -6,8 +6,7 @@ Toda tabela nova é company-scoped. Migração única, gerada com `pnpm db:gener
 
 | Coluna | Tipo | Observação |
 | --- | --- | --- |
-| `key` | text, nulo | Único por empresa quando preenchido |
-| `status` | text, `draft` / `active` / `archived` | Padrão `active`, preservando workflows só-prompt |
+| `status` | text, `draft` / `active` / `archived` | Padrão `active`, preservando workflows só-prompt; valores validados por zod, sem `CHECK` no banco (a checagem de compatibilidade de migração recusa `CHECK` validado em tabela existente) |
 | `latest_version_id` | uuid, nulo | FK para `workflow_versions` |
 | `latest_version_number` | integer, padrão 0 | Contador atômico de versões |
 

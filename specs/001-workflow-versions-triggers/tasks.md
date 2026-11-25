@@ -42,12 +42,12 @@ Monorepo pnpm: `packages/db`, `packages/shared`, `server`. A UI não muda nesta 
 
 **⚠️ CRITICAL**: nenhuma história começa antes de T009
 
-- [ ] T004 Em `packages/db/src/schema/workflows.ts`, acrescentar as colunas `key` (text, nulo, único por empresa quando preenchido), `status` (text, `draft` | `active` | `archived`, padrão `active`), `latest_version_id` (uuid, nulo) e `latest_version_number` (integer, padrão 0)
-- [ ] T005 [P] Criar `packages/db/src/schema/workflow_versions.ts` com `id` uuid PK, `company_id` FK `companies` (cascade), `workflow_id` FK `workflows` (cascade), `version` integer, `spec` jsonb, `spec_hash` text, `published_by_agent_id` uuid nulo (FK `agents`, set null), `published_by_user_id` text nulo, `created_at` timestamptz; índice único `(workflow_id, version)` e índice `(company_id, workflow_id, created_at)`
-- [ ] T006 [P] Criar `packages/db/src/schema/routine_workflow_targets.ts` com `routine_id` uuid PK FK `routines` (cascade), `company_id` FK `companies` (cascade), `workflow_id` FK `workflows` (restrict), `created_by_agent_id` uuid nulo, `created_by_user_id` text nulo, `created_at` e `updated_at` timestamptz
-- [ ] T007 [P] Acrescentar `default_execution_policy` (jsonb, nulo) em `packages/db/src/schema/companies.ts` e em `packages/db/src/schema/projects.ts`
-- [ ] T008 Exportar `workflowVersions` e `routineWorkflowTargets` em `packages/db/src/schema/index.ts`
-- [ ] T009 Rodar `pnpm db:generate` para gerar uma única migração (próximo número depois de `0505`), conferir que o SQL só adiciona colunas e tabelas, manter os cinco snapshots mais novos conforme `rules/database-migration-snapshots.mdc` e rodar o typecheck de `packages/db`
+- [X] T004 Em `packages/db/src/schema/workflows.ts`, acrescentar as colunas `status` (text, `draft` | `active` | `archived`, padrão `active`, validado por zod e sem `CHECK` no banco), `latest_version_id` (uuid, nulo) e `latest_version_number` (integer, padrão 0)
+- [X] T005 [P] Criar `packages/db/src/schema/workflow_versions.ts` com `id` uuid PK, `company_id` FK `companies` (cascade), `workflow_id` FK `workflows` (cascade), `version` integer, `spec` jsonb, `spec_hash` text, `published_by_agent_id` uuid nulo (FK `agents`, set null), `published_by_user_id` text nulo, `created_at` timestamptz; índice único `(workflow_id, version)` e índice `(company_id, workflow_id, created_at)`
+- [X] T006 [P] Criar `packages/db/src/schema/routine_workflow_targets.ts` com `routine_id` uuid PK FK `routines` (cascade), `company_id` FK `companies` (cascade), `workflow_id` FK `workflows` (restrict), `created_by_agent_id` uuid nulo, `created_by_user_id` text nulo, `created_at` e `updated_at` timestamptz
+- [X] T007 [P] Acrescentar `default_execution_policy` (jsonb, nulo) em `packages/db/src/schema/companies.ts` e em `packages/db/src/schema/projects.ts`
+- [X] T008 Exportar `workflowVersions` e `routineWorkflowTargets` em `packages/db/src/schema/index.ts`
+- [X] T009 Rodar `pnpm db:generate` para gerar uma única migração (próximo número depois de `0505`), conferir que o SQL só adiciona colunas e tabelas, manter os cinco snapshots mais novos conforme `rules/database-migration-snapshots.mdc` e rodar o typecheck de `packages/db`
 
 **Checkpoint**: banco pronto; histórias podem começar
 

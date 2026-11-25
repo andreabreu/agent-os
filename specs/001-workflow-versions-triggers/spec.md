@@ -134,7 +134,7 @@ Uma rotina existente passa a poder ter como alvo um workflow publicado, além do
 
 ### Key Entities *(include if feature involves data)*
 
-- **Workflow**: definição reutilizável da empresa com nome, manual em texto, estado e referência à versão mais recente. Já existe; ganha chave, estado e versão mais recente.
+- **Workflow**: definição reutilizável da empresa com nome, manual em texto, estado e referência à versão mais recente. Já existe; ganha estado e versão mais recente.
 - **Versão de workflow**: instantâneo imutável de um workflow, com número, definição estruturada, impressão do conteúdo e quem publicou.
 - **Definição (spec)**: conjunto de etapas, cada uma com chave, tipo, dono, entradas, saídas nomeadas com destino e limites.
 - **Política de execução padrão**: estágios de revisão e aprovação aplicados a tarefas novas, guardada na empresa e no projeto.
