@@ -174,6 +174,7 @@ import {
   dependencyResolvedWakePayloadSql,
 } from "../issue-dependency-wakeups.js";
 import { resumeIfPauseAlreadyReleased } from "../issue-tree-resume.js";
+import { isPendingExecutionStageParticipant } from "../issue-execution-policy.js";
 import {
   ISSUE_PAUSED_ERROR_CODE,
   ISSUE_TREE_CONTROL_INTERACTION_WAKE_REASONS,
@@ -451,6 +452,15 @@ export async function notifyOtherAgentsQueuedOnSettledIssue(db: Db, run: Pick<ty
   if (!waiting) return false;
   await db.transaction(tx => notifyQueuedRunDispatch(tx, { companyId: run.companyId }));
   return true;
+}
+
+// A review or approval stage waits on its reviewer, not on the task's own
+// dependencies: parking the pending participant until blockers resolve would
+// stall the review (upstream #21639). The stored issue state decides, never wake context.
+async function isPendingStageParticipantOfIssue(db: Db, companyId: string, issueId: string, agentId: string) {
+  const [row] = await db.select({ status: issues.status, executionState: issues.executionState }).from(issues)
+    .where(and(eq(issues.companyId, companyId), eq(issues.id, issueId)));
+  return isPendingExecutionStageParticipant(row, agentId);
 }
 
 export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDependencies) {
@@ -1358,7 +1368,8 @@ export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDepende
           blockerStallVerified,
           await isVerifiedDependencyInteractionResponse(db, { companyId: run.companyId,
             issueId, agentId: run.agentId, context }),
-        )
+        ) &&
+        !(await isPendingStageParticipantOfIssue(db, run.companyId, issueId, run.agentId))
       ) {
         await cancelQueuedRunForBlockedDependencies(
           run,
@@ -4474,7 +4485,8 @@ export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDepende
             !activeExecutionRun &&
             dependencyReadiness &&
             !dependencyReadiness.isDependencyReady &&
-            !blockedInteractionWake
+            !blockedInteractionWake &&
+            !(await isPendingStageParticipantOfIssue(tx as unknown as Db, issue.companyId, issue.id, agentId))
           ) {
             if (caseRequest) waitForCaseAdmission("issue_dependencies_blocked", "Case handoff is waiting for task dependencies to resolve");
             await recordExecutionWait(tx as unknown as Db, {

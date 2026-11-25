@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { caseWorkflowDocumentTextSchema } from "./case-handoffs.js";
+import { workflowSpecSchema } from "./workflow-spec.js";
 
 export const createWorkflowSchema = z.object({
   name: z.string().trim().min(1).max(200),
@@ -14,4 +15,21 @@ export const listWorkflowsSchema = z.object({
 }).strict();
 export const readWorkflowQuerySchema = z.object({
   snapshot: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+}).strict();
+export const publishWorkflowVersionSchema = z.object({
+  spec: workflowSpecSchema,
+}).strict();
+export const listWorkflowVersionsSchema = listWorkflowsSchema;
+export const readWorkflowVersionQuerySchema = readWorkflowQuerySchema;
+export const simulateWorkflowSchema = z.object({
+  spec: z.unknown().optional(),
+  versionNumber: z.number().int().positive().optional(),
+  script: z.record(z.string(), z.array(z.string().trim().min(1).max(64)).min(1).max(100)),
+}).strict();
+export const setRoutineWorkflowTargetSchema = z.object({
+  workflowId: z.string().guid(),
+}).strict();
+export const workflowVersionParamsSchema = z.object({
+  id: z.string().guid(),
+  version: z.coerce.number().int().positive(),
 }).strict();

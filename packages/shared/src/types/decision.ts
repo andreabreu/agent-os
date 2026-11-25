@@ -85,6 +85,8 @@ export interface DecisionOption {
   description?: string | null;
   style?: DecisionOptionStyle;
   effects: DecisionEffect[];
+  /** Inputs that must be filled when this option is chosen. */
+  requiredInputIds?: string[];
 }
 
 export interface DecisionStatsCounts {

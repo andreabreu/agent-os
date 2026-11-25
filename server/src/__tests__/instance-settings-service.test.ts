@@ -147,6 +147,7 @@ describe("instance settings service", () => {
       enableExternalObjects: false,
       enableSmokeLab: false,
       enableCases: false,
+      enableWorkflowVersions: false,
       enableIssuePlanDecompositions: true,
       enableExperimentalFileViewer: true,
       enableBuiltInAgents: true,

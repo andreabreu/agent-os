@@ -4,7 +4,7 @@ import { MUSE_ASSET_VERSION, museStopBoundarySchema, museDetectorCleanupAttestat
 import { slackTestMessageSchema, slackTestMessageResultSchema, slackManagerAuthorizationSchema, slackSetupOptionsSchema, slackManagedProvisionSchema, slackManagedResultSchema, slackRegistrationSchema, slackSetupActionSchema, slackInstallAuthorizationSchema, slackRegistrationStateSchema, slackAppConfigurationSchema, slackAvatarStateSchema, slackAccountStateSchema } from "@paperclipai/shared";
 import { experimentalApiMetadata } from "./experimental-api-metadata.js";
 import { LINK_PREVIEW_BATCH_LIMIT, ATTENTION_SOURCE_KINDS } from "@paperclipai/shared";
-import { agentCaseHandoffSchema, caseWorkflowDocumentTextSchema, doneCaseHandoffSchema, createWorkflowSchema, updateWorkflowSchema, listWorkflowsSchema, readWorkflowQuerySchema } from "@paperclipai/shared";
+import { agentCaseHandoffSchema, caseWorkflowDocumentTextSchema, doneCaseHandoffSchema, createWorkflowSchema, updateWorkflowSchema, listWorkflowsSchema, readWorkflowQuerySchema, publishWorkflowVersionSchema, listWorkflowVersionsSchema, readWorkflowVersionQuerySchema, putDefaultExecutionPolicySchema, reassignIssueExecutionStageSchema, setRoutineWorkflowTargetSchema, startWorkflowRunSchema, completeWorkflowStepSchema, listWorkflowRunsSchema, cancelWorkflowRunSchema, submitWorkflowFormSchema, simulateWorkflowSchema } from "@paperclipai/shared";
 import {
   experimentalApiDocs,
   experimentalApiPaths,
@@ -14104,6 +14104,71 @@ for (const [method, path, body, summary] of [
   request: { params: path.includes("{companyId}") ? z.object({ companyId: z.string().uuid() }) : z.object({ id: z.string().uuid() }),
     ...(body ? { body: jsonBody(body) } : {}), ...(method === "get" ? { query: path.includes("{companyId}") ? listWorkflowsSchema : readWorkflowQuerySchema } : {}) },
   responses: { [method === "post" ? 201 : 200]: r.ok(), 400: r.badRequest, 401: r.unauthorized, 403: r.forbidden, 404: r.notFound, 409: r.conflict } });
+
+const WORKFLOW_VERSIONS_DESCRIPTION = "Requires enableCases, enableWorkflowVersions and company access. A published version is immutable: there is no update or delete route, and a change means publishing the next version. Versions are numbered sequentially per workflow. Version reads return an ETag with the spec's SHA-256 fingerprint; pass it as snapshot to reject a changed read with 409. Archived workflows refuse new versions with 409.";
+for (const [method, path, body, query, summary, status] of [
+  ["post", "/api/workflows/{id}/versions", publishWorkflowVersionSchema, undefined, "Publish the next immutable version of a workflow", 201],
+  ["get", "/api/workflows/{id}/versions", undefined, listWorkflowVersionsSchema, "List a workflow's published versions without their specs", 200],
+  ["get", "/api/workflows/{id}/versions/{version}", undefined, readWorkflowVersionQuerySchema, "Read one published workflow version with its spec", 200],
+  ["post", "/api/workflows/{id}/archive", undefined, undefined, "Archive a workflow so it receives no new versions", 200],
+] as const) registry.registerPath({ method, path, tags: ["Cases"], summary, description: WORKFLOW_VERSIONS_DESCRIPTION,
+  request: { params: path.includes("{version}") ? z.object({ id: z.string().uuid(), version: z.number().int().positive() }) : z.object({ id: z.string().uuid() }),
+    ...(body ? { body: jsonBody(body) } : {}), ...(query ? { query } : {}) },
+  responses: { [status]: r.ok(), 400: r.badRequest, 401: r.unauthorized, 403: r.forbidden, 404: r.notFound, 409: r.conflict } });
+
+const DEFAULT_EXECUTION_POLICY_DESCRIPTION = "Requires enableCases and enableWorkflowVersions. A new task that declares no executionPolicy receives its project's default, otherwise its company's. A policy declared at creation, including null, always wins; routine tasks, conversations and tasks created as done never receive a default. Reads need company access (projects also need project read access); writes are board-only. Defaults cannot schedule a monitor. Send null to clear.";
+for (const [method, path, summary] of [
+  ["get", "/api/companies/{companyId}/default-execution-policy", "Read the company's default execution policy for new tasks"],
+  ["put", "/api/companies/{companyId}/default-execution-policy", "Set or clear the company's default execution policy for new tasks"],
+  ["get", "/api/projects/{id}/default-execution-policy", "Read the project's default execution policy for new tasks"],
+  ["put", "/api/projects/{id}/default-execution-policy", "Set or clear the project's default execution policy for new tasks"],
+] as const) registry.registerPath({ method, path, tags: ["Cases"], summary, description: DEFAULT_EXECUTION_POLICY_DESCRIPTION,
+  request: { params: path.includes("{companyId}") ? z.object({ companyId: z.string().uuid() }) : z.object({ id: z.string().uuid() }),
+    ...(method === "put" ? { body: jsonBody(putDefaultExecutionPolicySchema) } : {}) },
+  responses: { 200: r.ok(), 400: r.badRequest, 401: r.unauthorized, 403: r.forbidden, 404: r.notFound } });
+
+registry.registerPath({ method: "post", path: "/api/issues/{id}/execution-policy/reassign", tags: ["Cases"],
+  summary: "Hand a pending review or approval stage to another configured participant",
+  description: "Requires enableCases and enableWorkflowVersions. Only the stage's active participant or a board user may reassign. The target must already be configured on the pending stage and cannot be the executor under review. A comment is required. Reassigning to the active participant is a no-op. Refused with 409 code execution_stage_participant_running while a run is executing the task. The round counter and decision history are kept; an agent target is woken.",
+  request: { params: z.object({ id: z.string().uuid() }), body: jsonBody(reassignIssueExecutionStageSchema) },
+  responses: { 200: r.ok(), 400: r.badRequest, 401: r.unauthorized, 403: r.forbidden, 404: r.notFound, 409: r.conflict, 422: r.unprocessable } });
+
+const ROUTINE_WORKFLOW_TARGET_DESCRIPTION = "Requires enableCases and enableWorkflowVersions. A routine with a workflow target starts that workflow on every schedule, webhook, API or manual run: the created task names the workflow and its latest published version, and the routine run's triggerPayload records workflowId, workflowVersionId and workflowVersion. A run fails with a clear reason, creating no task, when the workflow is archived or has no published version. Heartbeat triggers never start work and are unaffected. Board users, or the agent that runs the routine, may change the target; routine revisions do not capture it.";
+for (const [method, path, summary, status] of [
+  ["get", "/api/routines/{id}/workflow-target", "Read the workflow a routine starts", 200],
+  ["put", "/api/routines/{id}/workflow-target", "Make a routine start a published workflow", 200],
+  ["delete", "/api/routines/{id}/workflow-target", "Stop a routine from starting a workflow", 204],
+] as const) registry.registerPath({ method, path, tags: ["Routines"], summary, description: ROUTINE_WORKFLOW_TARGET_DESCRIPTION,
+  request: { params: z.object({ id: z.string().uuid() }), ...(method === "put" ? { body: jsonBody(setRoutineWorkflowTargetSchema) } : {}) },
+  responses: { [status]: r.ok(), 400: r.badRequest, 401: r.unauthorized, 403: r.forbidden, 404: r.notFound, 409: r.conflict } });
+
+registry.registerPath({ method: "post", path: "/api/workflows/{id}/simulate", tags: ["Cases"],
+  summary: "Simulate a workflow with scripted outcomes, without creating any work",
+  description: "Requires enableCases and enableWorkflowVersions. Simulates the spec in the body, or a published version (versionNumber, otherwise the latest), with the outcomes each step returns on its successive visits (the last one repeats). Uses the same rules as a real run and never creates tasks, decisions, cases or runs. Returns the path and whether the run completes or escalates.",
+  request: { params: z.object({ id: z.string().uuid() }), body: jsonBody(simulateWorkflowSchema) },
+  responses: { 200: r.ok(), 400: r.badRequest, 401: r.unauthorized, 403: r.forbidden, 404: r.notFound, 422: r.unprocessable } });
+
+const WORKFLOW_RUNS_DESCRIPTION = "Requires enableCases and enableWorkflowVersions. A run executes a published workflow version on a case's primary task and stays on that version. A case holds at most one active run (409 otherwise). Each step hands the case to its owner; the owner finishes it with the complete route and one declared outcome, after saving the step's output documents on the task (422 missing_outputs otherwise). A free handoff on a case with an active run is refused. Returning to an earlier step is a new attempt; when review rounds or attempts are used up the run waits for a person (waiting_human). Agent steps are handoffs, approval gates are decisions in the decision queue, human steps give the task to their person and forms take answers through submit-form; a version that cannot run is refused (422 workflow_not_executable). An unknown run state version returns 409 workflow_run_state_unsupported.";
+for (const [method, path, summary, status] of [
+  ["post", "/api/companies/{companyId}/workflow-runs", "Start a run of a workflow on a case", 201],
+  ["get", "/api/companies/{companyId}/workflow-runs", "List workflow runs", 200],
+  ["get", "/api/workflow-runs/{id}", "Read a workflow run with its steps and recent events", 200],
+  ["post", "/api/workflow-runs/{id}/steps/{stepKey}/complete", "Finish the current step of a workflow run with an outcome", 200],
+  ["post", "/api/workflow-runs/{id}/steps/{stepKey}/submit-form", "Answer the current form step of a workflow run", 200],
+  ["post", "/api/workflow-runs/{id}/cancel", "Cancel a workflow run and its open gate decisions; the case's task stays", 200],
+  ["post", "/api/workflow-runs/{id}/resume", "Resume a workflow run that waits for a person", 200],
+] as const) registry.registerPath({ method, path, tags: ["Cases"], summary, description: WORKFLOW_RUNS_DESCRIPTION,
+  request: {
+    params: path.includes("{companyId}") ? z.object({ companyId: z.string().uuid() })
+      : path.includes("{stepKey}") ? z.object({ id: z.string().uuid(), stepKey: z.string() }) : z.object({ id: z.string().uuid() }),
+    ...(path.endsWith("/complete") ? { body: jsonBody(completeWorkflowStepSchema) }
+      : path.endsWith("/submit-form") ? { body: jsonBody(submitWorkflowFormSchema) }
+      : path.endsWith("/cancel") ? { body: jsonBody(cancelWorkflowRunSchema) }
+      : path.endsWith("/resume") ? {}
+      : method === "post" ? { body: jsonBody(startWorkflowRunSchema) } : {}),
+    ...(method === "get" && path.includes("{companyId}") ? { query: listWorkflowRunsSchema } : {}),
+  },
+  responses: { [status]: r.ok(), 400: r.badRequest, 401: r.unauthorized, 403: r.forbidden, 404: r.notFound, 409: r.conflict, 422: r.unprocessable } });
 
 for (const [method, path, body] of experimentalApiPaths) {
   const query = experimentalApiQueries[`${method.toUpperCase()} ${path}`];

@@ -11,7 +11,7 @@ import type {
   IssueMonitorScheduledBy,
 } from "@paperclipai/shared";
 import { issueExecutionPolicySchema, issueExecutionStateSchema } from "@paperclipai/shared";
-import { unprocessable } from "../errors.js";
+import { conflict, forbidden, unprocessable } from "../errors.js";
 
 type AssigneeLike = {
   assigneeAgentId?: string | null;
@@ -53,6 +53,8 @@ type TransitionInput = {
   commentBody?: string | null;
   reviewRequest?: IssueExecutionState["reviewRequest"] | null;
   monitorExplicitlyUpdated?: boolean;
+  /** A pending `human_only` interaction on the issue: entering `in_review` is then a wait, not a review request. */
+  hasPendingHumanInputWait?: boolean;
 };
 
 type TransitionResult = {
@@ -412,6 +414,23 @@ export function normalizeIssueExecutionPolicy(input: unknown): IssueExecutionPol
   };
 }
 
+/**
+ * Whether an agent is the active participant of the task's pending review or approval stage.
+ * Same check as upstream #21639. Reads the stored issue state, never wake context.
+ * @param issue The task's stored status and execution state
+ * @param agentId The agent being woken or claiming a run
+ */
+export function isPendingExecutionStageParticipant(
+  issue: { status?: string | null; executionState?: unknown } | null | undefined,
+  agentId: string | null | undefined,
+): boolean {
+  if (!issue || !agentId || issue.status !== "in_review") return false;
+  const state = parseIssueExecutionState(issue.executionState);
+  return state?.status === PENDING_STATUS
+    && state.currentParticipant?.type === "agent"
+    && state.currentParticipant.agentId === agentId;
+}
+
 export function parseIssueExecutionState(input: unknown): IssueExecutionState | null {
   if (input == null) return null;
   const parsed = issueExecutionStateSchema.safeParse(input);
@@ -508,6 +527,82 @@ function patchForPrincipal(principal: IssueExecutionStagePrincipal | null) {
   return principal.type === "agent"
     ? { assigneeAgentId: principal.agentId ?? null, assigneeUserId: null }
     : { assigneeAgentId: null, assigneeUserId: principal.userId ?? null };
+}
+
+type ReassignStageInput = {
+  issue: IssueLike & { executionRunId?: string | null; checkoutRunId?: string | null };
+  policy: IssueExecutionPolicy | null;
+  actor: ActorLike;
+  isBoardActor: boolean;
+  toParticipant: IssueExecutionStagePrincipal;
+  comment?: string | null;
+};
+
+type ReassignStageResult =
+  | { changed: false }
+  | {
+    changed: true;
+    patch: Record<string, unknown>;
+    decision: Pick<IssueExecutionDecision, "stageId" | "stageType" | "outcome" | "body">;
+  };
+
+export const EXECUTION_STAGE_PARTICIPANT_RUNNING_CODE = "execution_stage_participant_running";
+
+/**
+ * Hands a pending review or approval stage to another participant already configured on it.
+ * Adapted from upstream #15265. The stage, its round counter and its decision history are kept.
+ * @param input The locked issue, its policy, the acting principal and the target participant
+ * @returns The issue patch and decision to record, or `changed: false` when the target is already active
+ */
+export function applyIssueExecutionStageReassignment(input: ReassignStageInput): ReassignStageResult {
+  const existingState = parseIssueExecutionState(input.issue.executionState);
+  const activeStage = input.policy ? findStageById(input.policy, existingState?.currentStageId) : null;
+  if (!input.policy || !activeStage || existingState?.status !== PENDING_STATUS) {
+    throw unprocessable("This issue has no pending execution stage to reassign");
+  }
+
+  const currentParticipant =
+    existingState.currentParticipant ??
+    selectStageParticipant(activeStage, { exclude: existingState.returnAssignee ?? null });
+  if (!currentParticipant) {
+    throw unprocessable(`No eligible ${activeStage.type} participant is configured for this issue`);
+  }
+  if (!input.isBoardActor && !principalsEqual(currentParticipant, actorPrincipal(input.actor))) {
+    throw forbidden("Only the active reviewer or approver can reassign the current execution stage");
+  }
+  if (!stageHasParticipant(activeStage, input.toParticipant)) {
+    throw unprocessable("The reassignment target must already be a configured participant on this stage");
+  }
+  if (existingState.returnAssignee && principalsEqual(input.toParticipant, existingState.returnAssignee)) {
+    throw unprocessable("Cannot reassign this stage to the executor whose own work is under review");
+  }
+  if (principalsEqual(input.toParticipant, currentParticipant)) return { changed: false };
+  if (!input.comment?.trim()) {
+    throw unprocessable(`Reassigning a review or approval stage requires a comment. ${STAGE_DECISION_COMMENT_HINT}`);
+  }
+  // Stopping the outgoing participant's run safely lives inside the issue PATCH
+  // route; until it is extracted, a stage owned by a running execution is refused.
+  if (input.issue.executionRunId || input.issue.checkoutRunId) {
+    throw conflict("A run is executing this task; wait for it to finish or stop it before reassigning the stage", {
+      code: EXECUTION_STAGE_PARTICIPANT_RUNNING_CODE,
+    });
+  }
+
+  const comment = input.comment.trim();
+  const reassignedState: IssueExecutionState = {
+    ...existingState,
+    status: PENDING_STATUS,
+    currentStageId: activeStage.id,
+    currentStageType: activeStage.type,
+    currentParticipant: input.toParticipant,
+    lastDecisionOutcome: "reassigned",
+    lastReassignment: { fromParticipant: currentParticipant, toParticipant: input.toParticipant, comment },
+  };
+  return {
+    changed: true,
+    patch: { status: "in_review", ...patchForPrincipal(input.toParticipant), executionState: reassignedState },
+    decision: { stageId: activeStage.id, stageType: activeStage.type, outcome: "reassigned", body: comment },
+  };
 }
 
 function buildCompletedState(previous: IssueExecutionState | null, currentStage: IssueExecutionStage): IssueExecutionState {
@@ -810,10 +905,25 @@ function applyIssueExecutionStageTransition(input: TransitionInput): TransitionR
         // earlier completedStageIds no longer match the policy (e.g. stage ids
         // were regenerated by a mid-flow policy edit), turning a final-stage
         // approval into an endless re-review loop (#7893).
-        const nextStage = nextPendingStageAfter(input.policy, activeStage, approvedState);
+        const returnAssignee = existingState?.returnAssignee ?? null;
+        const completedStageIds = [...approvedState.completedStageIds];
+        const selectNextParticipant = (stage: IssueExecutionStage | null) => stage
+          ? selectStageParticipant(stage, { preferred: explicitAssignee, exclude: returnAssignee })
+          : null;
+        let nextStage = nextPendingStageAfter(input.policy, activeStage, approvedState);
+        let participant = selectNextParticipant(nextStage);
+        // Mirror the workflow-start path: a later review stage that only the
+        // author could fill is skipped instead of stranding the approval (#21546).
+        while (nextStage && !participant && canAutoSkipPendingStage({ stage: nextStage, returnAssignee, requestedStatus })) {
+          completedStageIds.push(nextStage.id);
+          nextStage = nextPendingStageAfter(input.policy, nextStage,
+            buildStateWithCompletedStages({ previous: approvedState, completedStageIds, returnAssignee }));
+          participant = selectNextParticipant(nextStage);
+        }
+        const advancedState: IssueExecutionState = { ...approvedState, completedStageIds };
 
         if (!nextStage) {
-          patch.executionState = approvedState;
+          patch.executionState = advancedState;
           return {
             patch,
             decision: {
@@ -825,17 +935,13 @@ function applyIssueExecutionStageTransition(input: TransitionInput): TransitionR
           };
         }
 
-        const participant = selectStageParticipant(nextStage, {
-          preferred: explicitAssignee,
-          exclude: existingState?.returnAssignee ?? null,
-        });
         if (!participant) {
           throw unprocessable(`No eligible ${nextStage.type} participant is configured for this issue`);
         }
 
         buildPendingStagePatch({
           patch,
-          previous: approvedState,
+          previous: advancedState,
           policy: input.policy,
           stage: nextStage,
           participant,
@@ -981,7 +1087,7 @@ function applyIssueExecutionStageTransition(input: TransitionInput): TransitionR
 
   const shouldStartWorkflow =
     requestedStatus === "done" ||
-    requestedStatus === "in_review";
+    (requestedStatus === "in_review" && !input.hasPendingHumanInputWait);
 
   if (!shouldStartWorkflow) {
     return { patch };

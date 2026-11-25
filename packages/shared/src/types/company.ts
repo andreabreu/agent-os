@@ -4,6 +4,7 @@ import type {
   IssueThreadInteractionResolverPolicy,
   PauseReason,
 } from "../constants.js";
+import type { IssueExecutionPolicy } from "./issue.js";
 
 export interface InteractionResolverKindGovernance {
   defaultPolicy?: IssueThreadInteractionResolverPolicy;
@@ -44,6 +45,8 @@ export interface Company {
   budgetOwnerUserId: string | null;
   requireBoardApprovalForNewAgents: boolean;
   interactionResolverGovernance: InteractionResolverGovernance;
+  /** Execution policy given to new tasks that declare none (experimental `enableWorkflowVersions`). */
+  defaultExecutionPolicy?: IssueExecutionPolicy | null;
   feedbackDataSharingEnabled: boolean;
   feedbackDataSharingConsentAt: Date | null;
   feedbackDataSharingConsentByUserId: string | null;

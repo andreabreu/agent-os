@@ -3529,6 +3529,34 @@
       "when": 1795544784796,
       "tag": "0505_nice_rawhide_kid",
       "breakpoints": true
+    },
+    {
+      "idx": 506,
+      "version": "7",
+      "when": 1795574830564,
+      "tag": "0506_shiny_fantastic_four",
+      "breakpoints": true
+    },
+    {
+      "idx": 507,
+      "version": "7",
+      "when": 1795612909781,
+      "tag": "0507_outgoing_anthem",
+      "breakpoints": true
+    },
+    {
+      "idx": 508,
+      "version": "7",
+      "when": 1795619974505,
+      "tag": "0508_curved_warbound",
+      "breakpoints": true
+    },
+    {
+      "idx": 509,
+      "version": "7",
+      "when": 1795625660893,
+      "tag": "0509_eager_jack_flag",
+      "breakpoints": true
     }
   ]
 }

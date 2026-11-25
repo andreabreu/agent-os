@@ -68,6 +68,7 @@ export const instanceExperimentalSettingsSchema = z.object({
   enableGoogleWorkspaceConnector: z.boolean().default(false),
   enableAwsConnector: z.boolean().default(false),
   enableCases: z.boolean().default(false),
+  enableWorkflowVersions: z.boolean().default(false),
   enableAgentChat: z.boolean().default(true),
   enableCombinedInboxTasks: z.boolean().default(false),
   enableArtifactsV1: z.boolean().default(true),

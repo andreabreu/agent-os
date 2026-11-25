@@ -100,6 +100,8 @@ export const decisionOptionSchema = z.object({
   description: z.string().max(2_000).nullable().optional(),
   style: decisionOptionStyleSchema.optional(),
   effects: z.array(decisionEffectSchema).max(10),
+  /** Inputs that must be filled when this option is chosen, in addition to the decision-wide required inputs. */
+  requiredInputIds: z.array(z.string().trim().min(1).max(120)).max(4).optional(),
 }).superRefine((option, ctx) => {
   if (option.effects.some((effect) => effect.type === "cancel_issue_tree") && option.style !== "destructive") {
     ctx.addIssue({

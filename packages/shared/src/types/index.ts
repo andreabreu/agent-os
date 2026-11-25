@@ -797,6 +797,7 @@ export type {
   RequiredQualityReview,
   QualityReviewBinding,
   IssueExecutionState,
+  IssueExecutionReassignment,
   IssueExecutionStage,
   IssueExecutionStageParticipant,
   IssueExecutionStagePrincipal,

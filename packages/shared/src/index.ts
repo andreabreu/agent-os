@@ -1253,6 +1253,7 @@ export type {
   RequiredQualityReview,
   QualityReviewBinding,
   IssueExecutionState,
+  IssueExecutionReassignment,
   IssueExecutionStage,
   IssueExecutionStageParticipant,
   IssueExecutionStagePrincipal,
@@ -2156,6 +2157,9 @@ export {
   requiredQualityReviewSchema,
   issueExecutionMonitorPolicySchema,
   issueExecutionStateSchema,
+  issueExecutionReassignmentSchema,
+  reassignIssueExecutionStageSchema,
+  type ReassignIssueExecutionStage,
   resolveIssueRecoveryActionSchema,
   isValidExistingBranchName,
   retryWorkspaceExportSchema,
@@ -3121,6 +3125,12 @@ export * from "./prompt-injection-prevention.js";
 
 export * from "./workspace-provider.js";
 export * from "./workflows.js";
+export * from "./workflow-spec.js";
+export * from "./workflow-runs.js";
+export * from "./workflow-run-transitions.js";
+export * from "./workflow-form.js";
+export * from "./workflow-simulate.js";
+export * from "./default-execution-policy.js";
 export { isValidIanaTimeZone, updateWorkspacePreferenceSchema, WORKSPACE_PREFERENCE_TIME_ZONE_MAX_LENGTH, type UpdateWorkspacePreference, type WorkspacePreference } from "./workspace-preferences.js";
 export * from "./agent-configuration.js";
 export {

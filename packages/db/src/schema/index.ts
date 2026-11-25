@@ -290,6 +290,11 @@ export * from "./prompt_injection_prevention.js";
 export * from "./responsibility_summary_invocations.js";
 export { responsibilityDashboardVersions } from "./responsibility_dashboard_versions.js";
 export { workflows } from "./workflows.js";
+export { workflowVersions } from "./workflow_versions.js";
+export { routineWorkflowTargets } from "./routine_workflow_targets.js";
+export { workflowRuns } from "./workflow_runs.js";
+export { workflowRunSteps } from "./workflow_run_steps.js";
+export { workflowRunEvents } from "./workflow_run_events.js";
 
 export { userWorkspacePreferences } from "./user_workspace_preferences.js";
 

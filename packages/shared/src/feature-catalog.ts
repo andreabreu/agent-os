@@ -205,6 +205,14 @@ export const INSTANCE_FEATURE_CATALOG: Record<InstanceFeatureKey, FeatureCatalog
     cloudDefault: false,
     selfHostedDefault: false,
   },
+  enableWorkflowVersions: {
+    title: "Workflow versions",
+    description:
+      "Versioned, validated workflow definitions, default execution policies, stage reassignment, and routines that start a workflow. Requires Cases.",
+    tier: "managed",
+    cloudDefault: false,
+    selfHostedDefault: false,
+  },
   enableAgentChat: {
     title: "Agent Chat (compatibility)",
     description: "Deprecated compatibility key. Agent Chat is always enabled; stored and managed values are ignored.",

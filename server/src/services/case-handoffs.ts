@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { assertWorkflowRunAllowsHandoff } from "./workflow-run-case-guard.js";
 import { assertAgentInteraction } from "./agent-interaction-policy.js";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
@@ -366,6 +367,8 @@ export function caseHandoffService(db: Db) {
     async handoff(companyId: string, actor: AuthorizationActor, rawInput: HandoffCaseInput, options: {
       /** Transport-specific execution authority; called only for fresh intent inside the write transaction. */
       beforeAccept?: (tx: Db) => Promise<void>;
+      /** Set only by the workflow run service: the run that requests this transfer of its own case. */
+      workflowRunId?: string;
     } = {}): Promise<HandoffCaseResult> {
       await assertEnabled(db);
       if (!companyAllowed(actor, companyId)) throw notFound("Company not found");
@@ -386,6 +389,7 @@ export function caseHandoffService(db: Db) {
           return result(prior, issue, actor, true);
         }
         await options.beforeAccept?.(tx);
+        if ("id" in input.case) await assertWorkflowRunAllowsHandoff(tx, companyId, input.case.id, options.workflowRunId);
         let source: typeof heartbeatRuns.$inferSelect | null = null;
         let sourceIssue: IssueRow | null = null;
         if (actor.type === "agent" && actor.runId) {
