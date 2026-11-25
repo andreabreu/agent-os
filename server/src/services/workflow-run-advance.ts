@@ -8,6 +8,7 @@ import { caseHandoffService } from "./case-handoffs.js";
 import { requireWorkflowVersionsEnabled } from "./workflow-versions.js";
 import { persistActivity } from "./activity-log.js";
 import { DELIVERY_QUEUES, notifyDeliveryWork } from "./delivery-work-notifications.js";
+import { firstReminderAt } from "./workflow-run-deadlines.js";
 import { assertHumanStepActor, assignHumanStep, returnTaskFromPerson } from "./workflow-run-human.js";
 import type { AuthorizationActor } from "./authorization.js";
 import {
@@ -212,11 +213,14 @@ export async function applyPlan(tx: Db, input: {
     const form = input.prepared.kind === "form";
     const gate = input.prepared.kind === "gate" || human !== null || form;
     const timeoutSec = form ? next.limits.timeoutSec : undefined;
+    const remindAt = (form || input.prepared.kind === "gate") ? firstReminderAt(next, now) : null;
     await tx.insert(workflowRunSteps).values({ runId: input.runId, companyId: input.companyId, stepKey: next.key,
       attempt: input.plan.attempt,
       status: human ? (human.assigned ? "running" : "ready") : form ? "awaiting_input"
         : input.prepared.kind === "gate" ? "awaiting_approval" : "running",
       dueAt: timeoutSec ? new Date(now.getTime() + timeoutSec * 1_000) : null,
+      remindAt,
+      openedAt: now,
       assigneeAgentId: human ? human.parkedAgentId : next.owner.kind === "agent" ? next.owner.ref : null,
       assigneeUserId: next.owner.kind === "user" ? next.owner.ref : null,
       handoffId: input.prepared.kind === "handoff" ? input.prepared.handoffId : null,
@@ -225,7 +229,7 @@ export async function applyPlan(tx: Db, input: {
       statusReason: human ? `Waiting for ${next.owner.ref} on "${next.name}"` : form ? `Waiting for answers on "${next.name}"`
         : gate ? `Waiting for a decision on "${next.name}"` : null,
       updatedAt: now }).where(eq(workflowRuns.id, input.runId));
-    if (timeoutSec) await notifyDeliveryWork(tx, DELIVERY_QUEUES.workflowRunRecovery, input.companyId);
+    if (timeoutSec || remindAt) await notifyDeliveryWork(tx, DELIVERY_QUEUES.workflowRunRecovery, input.companyId);
     if (input.prepared.kind === "gate") {
       const { decisionId } = input.prepared;
       await tx.insert(workflowRunEvents).values({ runId: input.runId, companyId: input.companyId,

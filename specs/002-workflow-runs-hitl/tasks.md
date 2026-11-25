@@ -204,9 +204,9 @@ Monorepo pnpm: `packages/db`, `packages/shared`, `server`. Sem UI nesta fase. Ar
 
 **Independent Test**: seção "PR 2c" do `quickstart.md`, passo 3.
 
-- [ ] T055 [P] [US8] Acrescentar em `server/src/__tests__/workflow-runs-control.integration.test.ts` os casos (relógio injetado): lembrete único por intervalo depois de `reminderAfterSec` sem decidir nada; sem lembrete depois de decidido; tempo de espera gravado no evento do run ao decidir; lembrete limitado a `timeoutSec`
-- [ ] T056 [US8] Em `server/src/services/workflow-run-work.ts`, registrar o prazo de lembrete pelo mecanismo do T036, emitir `gate_reminder` e notificar os decisores; gravar o tempo de espera (`closed_at - opened_at`) no evento `gate_decided`
-- [ ] T057 [US8] Rodar T055; tudo verde
+- [X] T055 [P] [US8] (Feito em `workflow-runs-gates.integration.test.ts`, que tem o fixture de gate) Acrescentar em `server/src/__tests__/workflow-runs-control.integration.test.ts` os casos (relógio injetado): lembrete único por intervalo depois de `reminderAfterSec` sem decidir nada; sem lembrete depois de decidido; tempo de espera gravado no evento do run ao decidir; lembrete limitado a `timeoutSec`
+- [X] T056 [US8] (Feito em `workflow-run-deadlines.ts`, com a coluna `remind_at`; o tempo de espera já ia em `waitedMs`) Em `server/src/services/workflow-run-work.ts`, registrar o prazo de lembrete pelo mecanismo do T036, emitir `gate_reminder` e notificar os decisores; gravar o tempo de espera (`closed_at - opened_at`) no evento `gate_decided`
+- [X] T057 [US8] Rodar T055; tudo verde
 
 ---
 

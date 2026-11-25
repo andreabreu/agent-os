@@ -3550,6 +3550,13 @@
       "when": 1795619974505,
       "tag": "0508_curved_warbound",
       "breakpoints": true
+    },
+    {
+      "idx": 509,
+      "version": "7",
+      "when": 1795625660893,
+      "tag": "0509_eager_jack_flag",
+      "breakpoints": true
     }
   ]
 }

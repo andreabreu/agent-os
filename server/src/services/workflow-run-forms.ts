@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, lte, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, lte } from "drizzle-orm";
 import { cases, companyMemberships, workflowRunEvents, workflowRunSteps, workflowRuns, type Db } from "@paperclipai/db";
 import { formAnswersMarkdown, planStepOutcome, validateFormAnswers, type WorkflowStep } from "@paperclipai/shared";
 import { conflict, forbidden, unprocessable } from "../errors.js";
@@ -113,12 +113,4 @@ export async function escalateOverdueForms(db: Db, now = new Date()) {
         reason: `Form "${step.stepKey}" timed out without answers` });
     });
   }
-}
-
-/** The next form deadline, which schedules the recovery pass without polling. */
-export async function nextFormDeadline(db: Db) {
-  const [row] = await db.select({ dueAt: workflowRunSteps.dueAt }).from(workflowRunSteps)
-    .where(and(eq(workflowRunSteps.status, "awaiting_input"), sql`${workflowRunSteps.dueAt} is not null`))
-    .orderBy(asc(workflowRunSteps.dueAt)).limit(1);
-  return row?.dueAt?.getTime() ?? null;
 }

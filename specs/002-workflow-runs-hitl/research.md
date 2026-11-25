@@ -87,6 +87,7 @@ Levantamento no `master` (`1a57a2abec`) para a spec 002. Os itens marcados "Spik
 
 - **Decisão**: o tempo de espera é `decidedAt - createdAt` da decisão, copiado para o evento do run. O lembrete é um prazo registrado pelo mecanismo de trabalho com prazo (S4); cada lembrete é um evento `gate_reminder` com limite por gate.
 - Sem tabela de SLA; sem polling.
+- **Revisado na implementação:** o próximo lembrete fica na coluna `remind_at` da etapa (gate ou formulário), separada de `due_at`, porque um formulário pode ter lembrete e prazo. O passe de recuperação agenda-se pelo menor `due_at` ou `remind_at`. Cada lembrete é um evento `gate_reminder` com chave por intervalo e uma entrada `workflow_run.gate_reminder` no activity log com os decisores; entregar o aviso por chat fica para a fase 2c.
 
 ## R11. Resumo de mudanças entre tentativas
 

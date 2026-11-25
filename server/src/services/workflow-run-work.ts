@@ -3,13 +3,13 @@ import type { createDeliveryWorkCoordinator } from "./delivery-work-coordinator.
 import { DELIVERY_QUEUES } from "./delivery-work-notifications.js";
 import { registerDeadlineWork } from "./deadline-work.js";
 import { recoverWorkflowRuns } from "./workflow-run-control.js";
-import { nextFormDeadline } from "./workflow-run-forms.js";
+import { nextWorkflowStepDeadline } from "./workflow-run-deadlines.js";
 
 const RECOVERY_RETRY_MS = 30_000;
 
 /**
  * Runs the workflow run recovery pass once at startup, whenever its queue is notified (a budget pause
- * starts or ends, a task enters Blocked, a form gets a deadline) and at the next form deadline. It never polls.
+ * starts or ends, a task enters Blocked, a gate or form gets a deadline) and at the next form timeout or reminder. It never polls.
  */
 export function registerWorkflowRunRecoveryWork(
   coordinator: ReturnType<typeof createDeliveryWorkCoordinator>,
@@ -20,6 +20,6 @@ export function registerWorkflowRunRecoveryWork(
     retryMs: RECOVERY_RETRY_MS,
     canRun,
     run: () => recoverWorkflowRuns(db),
-    next: () => nextFormDeadline(db),
+    next: () => nextWorkflowStepDeadline(db),
   });
 }

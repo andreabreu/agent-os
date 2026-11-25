@@ -34,6 +34,7 @@ import { errorHandler } from "../middleware/error-handler.js";
 import { workflowRunRoutes } from "../routes/workflow-runs.js";
 import { assignWorkflowHumanStepAfterRelease } from "../services/workflow-run-human.js";
 import { recoverWorkflowRuns } from "../services/workflow-run-control.js";
+import { nextWorkflowStepDeadline, sendDueWorkflowReminders } from "../services/workflow-run-deadlines.js";
 import { caseHandoffService } from "../services/case-handoffs.js";
 import { caseHandoffDeliveryService } from "../services/case-handoff-delivery.js";
 import { documentService } from "../services/documents.js";
@@ -95,7 +96,7 @@ describe("workflow runs with approval gates", () => {
 
   const decisionsSvc = () => decisionService(db, { wakeOriginAgent: async () => undefined });
 
-  async function fixture(options: { timeoutSec?: number; variant?: "gate" | "human" | "gateThenHuman" | "form" } = {}) {
+  async function fixture(options: { timeoutSec?: number; reminderAfterSec?: number; variant?: "gate" | "human" | "gateThenHuman" | "form" } = {}) {
     await instanceSettingsService(db).updateExperimental({ enableCases: true, enableWorkflowVersions: true });
     const companyId = randomUUID(), triage = randomUUID(), researcher = randomUUID(), publisher = randomUUID();
     await db.insert(companies).values({ id: companyId, name: "Studio", issuePrefix: `S${companyId.slice(0, 6)}` });
@@ -125,6 +126,7 @@ describe("workflow runs with approval gates", () => {
           outputs: ["notes"], limits: { maxAttempts: 3 }, outcomes: [{ key: "done", to: "approval" }] },
         { key: "approval", name: "Approval", type: "approval_gate", owner: { kind: "user", ref: "editor-user" },
           limits: { maxReviewRounds: 2, ...(options.timeoutSec ? { timeoutSec: options.timeoutSec } : {}) },
+          ...(options.reminderAfterSec ? { reminderAfterSec: options.reminderAfterSec } : {}),
           outcomes: [{ key: "approved", to: "publish" }, { key: "changes_requested", to: "research" }, { key: "rejected", to: "end" }] },
         { key: "publish", name: "Publish", type: "agent_task", owner: { kind: "agent", ref: publisher }, externalEffect: true,
           outcomes: [{ key: "done", to: "end" }] },
@@ -401,6 +403,52 @@ describe("workflow runs with approval gates", () => {
       .where(and(eq(workflowRunEvents.runId, f.runId), eq(workflowRunEvents.kind, "escalated")));
     expect(escalations).toHaveLength(1);
     expect(await documentService(db).getIssueDocumentByKey(f.taskId, "brief")).toBeNull();
+  });
+
+  it("reminds the deciders once per interval while a gate stays open, without deciding it", async () => {
+    const f = await fixture({ reminderAfterSec: 600 });
+    await finishResearchAsAgent(f);
+    const { step, decision } = await gateDecision(f.runId);
+    const opened = step!.openedAt.getTime();
+    const reminders = () => db.select().from(workflowRunEvents)
+      .where(and(eq(workflowRunEvents.runId, f.runId), eq(workflowRunEvents.kind, "gate_reminder")));
+    expect(step!.remindAt?.getTime()).toBe(opened + 600_000);
+    expect(await nextWorkflowStepDeadline(db)).toBe(opened + 600_000);
+
+    await sendDueWorkflowReminders(db, new Date(opened + 601_000));
+    await sendDueWorkflowReminders(db, new Date(opened + 602_000));
+    expect(await reminders()).toHaveLength(1);
+    await sendDueWorkflowReminders(db, new Date(opened + 1_201_000));
+
+    expect(await reminders()).toHaveLength(2);
+    expect((await reminders())[0]!.payload).toMatchObject({ stepKey: "approval", deciderUserIds: ["editor-user"] });
+    expect((await gateDecision(f.runId)).step!.remindAt?.getTime()).toBe(opened + 1_800_000);
+    const [pending] = await db.select().from(decisions).where(eq(decisions.id, decision!.id));
+    expect(pending!.status).toBe("open");
+    expect(await runRow(f.runId)).toMatchObject({ status: "waiting_human", currentStepKey: "approval" });
+  });
+
+  it("stops reminding once the gate is decided and records how long it waited", async () => {
+    const f = await fixture({ reminderAfterSec: 600 });
+    await finishResearchAsAgent(f);
+    const { step, decision } = await gateDecision(f.runId);
+
+    await decisionsSvc().decide({ id: decision!.id, optionId: "approved", decidedByUserId: "local-implicit-board", userActor: board });
+    await sendDueWorkflowReminders(db, new Date(step!.openedAt.getTime() + 700_000));
+
+    const events = await db.select().from(workflowRunEvents).where(eq(workflowRunEvents.runId, f.runId));
+    expect(events.filter((event) => event.kind === "gate_reminder")).toHaveLength(0);
+    expect(events.find((event) => event.kind === "gate_decided")!.payload).toMatchObject({ waitedMs: expect.any(Number) });
+  });
+
+  it("reminds only within the gate's declared timeout", async () => {
+    const f = await fixture({ timeoutSec: 1_000, reminderAfterSec: 600 });
+    await finishResearchAsAgent(f);
+    const { step } = await gateDecision(f.runId);
+
+    await sendDueWorkflowReminders(db, new Date(step!.openedAt.getTime() + 601_000));
+
+    expect((await gateDecision(f.runId)).step!.remindAt).toBeNull();
   });
 
   it("counts a second answer to the same gate only once", async () => {
