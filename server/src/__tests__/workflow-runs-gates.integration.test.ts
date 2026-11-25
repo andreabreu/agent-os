@@ -32,6 +32,7 @@ import {
 import { startEmbeddedPostgresTestDatabase } from "./helpers/embedded-postgres.js";
 import { errorHandler } from "../middleware/error-handler.js";
 import { workflowRunRoutes } from "../routes/workflow-runs.js";
+import { assignWorkflowHumanStepAfterRelease } from "../services/workflow-run-human.js";
 import { caseHandoffService } from "../services/case-handoffs.js";
 import { caseHandoffDeliveryService } from "../services/case-handoff-delivery.js";
 import { documentService } from "../services/documents.js";
@@ -93,7 +94,7 @@ describe("workflow runs with approval gates", () => {
 
   const decisionsSvc = () => decisionService(db, { wakeOriginAgent: async () => undefined });
 
-  async function fixture(options: { timeoutSec?: number } = {}) {
+  async function fixture(options: { timeoutSec?: number; variant?: "gate" | "human" | "gateThenHuman" } = {}) {
     await instanceSettingsService(db).updateExperimental({ enableCases: true, enableWorkflowVersions: true });
     const companyId = randomUUID(), triage = randomUUID(), researcher = randomUUID(), publisher = randomUUID();
     await db.insert(companies).values({ id: companyId, name: "Studio", issuePrefix: `S${companyId.slice(0, 6)}` });
@@ -128,6 +129,18 @@ describe("workflow runs with approval gates", () => {
           outcomes: [{ key: "done", to: "end" }] },
       ],
     };
+    const humanReview = { key: "review", name: "Review", type: "human_task", owner: { kind: "user", ref: "editor-user" },
+      outcomes: [{ key: "done", to: "publish" }] };
+    if (options.variant === "human") {
+      spec.steps = [{ ...spec.steps[0]!, outcomes: [{ key: "done", to: "review" }] }, humanReview, spec.steps[2]!] as typeof spec.steps;
+      spec.steps[2] = { ...spec.steps[2]!, externalEffect: false } as (typeof spec.steps)[number];
+    }
+    if (options.variant === "gateThenHuman") {
+      spec.steps[1] = { ...spec.steps[1]!, outcomes: [{ key: "approved", to: "review" }, { key: "changes_requested", to: "research" },
+        { key: "rejected", to: "end" }] } as (typeof spec.steps)[number];
+      spec.steps.push(humanReview as (typeof spec.steps)[number]);
+      spec.steps[2] = { ...spec.steps[2]!, externalEffect: false } as (typeof spec.steps)[number];
+    }
     await workflowVersionService(db).publish(companyId, workflow.id, board, { spec });
     const app = express();
     app.use(express.json());
@@ -157,6 +170,28 @@ describe("workflow runs with approval gates", () => {
     await request(app).post(`/api/workflow-runs/${f.runId}/steps/research/complete`).send({ outcome: "done" }).expect(200);
     await db.update(heartbeatRuns).set({ status: "succeeded", finishedAt: new Date() }).where(eq(heartbeatRuns.id, runId));
     await db.update(issues).set({ executionRunId: null, checkoutRunId: null }).where(eq(issues.id, f.taskId));
+    return runId;
+  }
+
+  function appAs(actor: unknown) {
+    const app = express();
+    app.use(express.json());
+    app.use((req, _res, next) => { (req as { actor?: unknown }).actor = actor; next(); });
+    app.use("/api", workflowRunRoutes(db));
+    app.use(errorHandler);
+    return app;
+  }
+
+  async function stepRow(runId: string, stepKey: string) {
+    const [row] = await db.select().from(workflowRunSteps)
+      .where(and(eq(workflowRunSteps.runId, runId), eq(workflowRunSteps.stepKey, stepKey)))
+      .orderBy(desc(workflowRunSteps.attempt)).limit(1);
+    return row!;
+  }
+
+  async function taskRow(taskId: string) {
+    const [row] = await db.select().from(issues).where(eq(issues.id, taskId));
+    return row!;
   }
 
   async function gateDecision(runId: string) {
@@ -277,6 +312,39 @@ describe("workflow runs with approval gates", () => {
     expect(after.status).toBe("waiting_human");
     expect(after.statusReason).toMatch(/timed out/i);
     expect((await gateDecision(f.runId)).decision!.status).toBe("expired");
+  });
+
+  it("gives a human step to its person when the agent's run releases the task, and hands it on afterwards", async () => {
+    const f = await fixture({ variant: "human" });
+    const researcherRun = await finishResearchAsAgent(f);
+
+    expect(await stepRow(f.runId, "review")).toMatchObject({ status: "ready", assigneeUserId: "editor-user", assigneeAgentId: f.researcher });
+    await assignWorkflowHumanStepAfterRelease(db, researcherRun);
+
+    expect(await taskRow(f.taskId)).toMatchObject({ assigneeUserId: "editor-user", assigneeAgentId: null });
+    expect(await stepRow(f.runId, "review")).toMatchObject({ status: "running" });
+    expect(await runRow(f.runId)).toMatchObject({ status: "waiting_human", currentStepKey: "review" });
+
+    await request(appAs(userActor(f.companyId, "intern-user", "viewer"))).post(`/api/workflow-runs/${f.runId}/steps/review/complete`)
+      .send({ outcome: "done" }).expect(403);
+    await request(appAs(board)).post(`/api/workflow-runs/${f.runId}/steps/review/complete`)
+      .send({ outcome: "done", summary: "Reads well" }).expect(200);
+    await deliverHandoffs();
+
+    expect(await taskRow(f.taskId)).toMatchObject({ assigneeUserId: null, assigneeAgentId: f.publisher });
+    expect(await runRow(f.runId)).toMatchObject({ status: "running", currentStepKey: "publish" });
+  });
+
+  it("gives a human step straight to its person when no run holds the task", async () => {
+    const f = await fixture({ variant: "gateThenHuman" });
+    await finishResearchAsAgent(f);
+    const { decision } = await gateDecision(f.runId);
+
+    await decisionsSvc().decide({ id: decision!.id, optionId: "approved", decidedByUserId: "local-implicit-board", userActor: board });
+
+    expect(await stepRow(f.runId, "review")).toMatchObject({ status: "running", assigneeUserId: "editor-user" });
+    expect(await taskRow(f.taskId)).toMatchObject({ assigneeUserId: "editor-user", assigneeAgentId: null });
+    expect(await runRow(f.runId)).toMatchObject({ status: "waiting_human", currentStepKey: "review" });
   });
 
   it("counts a second answer to the same gate only once", async () => {

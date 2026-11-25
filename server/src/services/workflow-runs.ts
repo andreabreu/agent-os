@@ -21,6 +21,7 @@ export const WORKFLOW_NOT_EXECUTABLE_CODE = "workflow_not_executable";
 function isRunnableNow(step: WorkflowStep) {
   if (step.type === "agent_task") return step.owner.kind === "agent";
   if (step.type === "approval_gate") return step.owner.kind === "user" || step.owner.kind === "role";
+  if (step.type === "human_task") return step.owner.kind === "user";
   return false;
 }
 const RECENT_EVENT_LIMIT = 50;
@@ -158,6 +159,10 @@ export function workflowRunService(db: Db) {
       const spec = workflowSpecSchema.parse(version!.spec);
       await assertRunnable(db, companyId, spec);
       const firstStep = findStep(spec, spec.start);
+      if (firstStep.type !== "agent_task") {
+        throw unprocessable("A run starts by handing the case to an agent, so the first step must be an agent step", {
+          code: WORKFLOW_NOT_EXECUTABLE_CODE, stepKey: firstStep.key });
+      }
       const origin: WorkflowRunOrigin = options.origin ?? (actor.type === "agent" ? "agent" : "manual");
 
       let run: WorkflowRunRow;

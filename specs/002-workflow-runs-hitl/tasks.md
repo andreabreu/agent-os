@@ -110,14 +110,14 @@ Monorepo pnpm: `packages/db`, `packages/shared`, `server`. Sem UI nesta fase. Ar
 
 ### Tests for User Story 3
 
-- [ ] T030 [P] [US3] Acrescentar em `server/src/__tests__/workflow-runs-gates.integration.test.ts` os casos: "pedir mudanças" com comentário reabre a etapa de destino com `attempt + 1` atribuída ao seu dono, que recebe o comentário; ao atingir `maxReviewRounds` o run vai a `waiting_human` com motivo e o responsável é avisado, sem voltar sozinho; outcome com destino `end` encerra o run; etapa humana atribui a tarefa à pessoa declarada e, ao concluir com as saídas, o run segue; usuário removido na etapa humana leva a `waiting_human`
+- [X] T030 [P] [US3] Acrescentar em `server/src/__tests__/workflow-runs-gates.integration.test.ts` os casos: "pedir mudanças" com comentário reabre a etapa de destino com `attempt + 1` atribuída ao seu dono, que recebe o comentário; ao atingir `maxReviewRounds` o run vai a `waiting_human` com motivo e o responsável é avisado, sem voltar sozinho; outcome com destino `end` encerra o run; etapa humana atribui a tarefa à pessoa declarada e, ao concluir com as saídas, o run segue; usuário removido na etapa humana leva a `waiting_human`
 
 ### Implementation for User Story 3
 
-- [ ] T031 [US3] Spike S1: confirmar como o servidor reatribui a tarefa do case a um usuário sem passar pelo handoff (precedente: `applyIssueExecutionPolicyTransition` em `server/src/services/issue-execution-policy.ts`) e qual autoridade exige; registrar em `research.md` (R4) e, se não houver caminho limpo, propor a extensão do destino do handoff antes de seguir
-- [ ] T032 [US3] Em `server/src/services/workflow-run-boundaries.ts`, implementar `assignHumanStep` (reatribui a tarefa do case à pessoa ou papel, `status = awaiting_review`, run `waiting_human`) e a conclusão da etapa humana pela mesma rota `complete`; se o usuário declarado não existe ou não pertence mais à empresa, o run vai a `waiting_human` com o motivo
-- [ ] T033 [US3] Em `server/src/services/workflow-run-advance.ts`, implementar a devolução: fechar a tentativa como `changes_requested`, abrir a do destino com `attempt + 1`, repassar o comentário nas instruções do agente de destino, escalar ao exceder `maxReviewRounds` e encerrar quando o destino é `end`
-- [ ] T034 [US3] Rodar T022 e T030; tudo verde
+- [X] T031 [US3] Spike S1: confirmar como o servidor reatribui a tarefa do case a um usuário sem passar pelo handoff (precedente: `applyIssueExecutionPolicyTransition` em `server/src/services/issue-execution-policy.ts`) e qual autoridade exige; registrar em `research.md` (R4) e, se não houver caminho limpo, propor a extensão do destino do handoff antes de seguir
+- [X] T032 [US3] Em `server/src/services/workflow-run-boundaries.ts`, implementar `assignHumanStep` (reatribui a tarefa do case à pessoa ou papel, `status = awaiting_review`, run `waiting_human`) e a conclusão da etapa humana pela mesma rota `complete`; se o usuário declarado não existe ou não pertence mais à empresa, o run vai a `waiting_human` com o motivo
+- [X] T033 [US3] Em `server/src/services/workflow-run-advance.ts`, implementar a devolução: fechar a tentativa como `changes_requested`, abrir a do destino com `attempt + 1`, repassar o comentário nas instruções do agente de destino, escalar ao exceder `maxReviewRounds` e encerrar quando o destino é `end`
+- [X] T034 [US3] Rodar T022 e T030; tudo verde
 
 **Checkpoint**: US1 a US3 entregam o fluxo HITL sequencial
 

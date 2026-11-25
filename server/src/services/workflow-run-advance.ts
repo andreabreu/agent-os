@@ -7,6 +7,7 @@ import { documentService } from "./documents.js";
 import { caseHandoffService } from "./case-handoffs.js";
 import { requireWorkflowVersionsEnabled } from "./workflow-versions.js";
 import { persistActivity } from "./activity-log.js";
+import { assertHumanStepActor, assignHumanStep, returnTaskFromPerson } from "./workflow-run-human.js";
 import type { AuthorizationActor } from "./authorization.js";
 import {
   assertStepActor,
@@ -73,7 +74,8 @@ export async function completeWorkflowStep(db: Db, companyId: string, runId: str
       eq(workflowRunEvents.runId, runId), eq(workflowRunEvents.eventKey, completionEventKey(stepKey, 0, input.idempotencyKey))));
     if (replayed) return readRunView(db, await loadRun(db, companyId, runId));
   }
-  if (run.status !== "running") throw conflict(`Workflow run is ${run.status}`, { code: "workflow_run_not_running" });
+  const waitingOnPerson = run.status === "waiting_human";
+  if (run.status !== "running" && !waitingOnPerson) throw conflict(`Workflow run is ${run.status}`, { code: "workflow_run_not_running" });
   if (run.currentStepKey !== stepKey) {
     throw conflict(`Step "${stepKey}" is not the current step`, { code: "workflow_step_not_current", currentStepKey: run.currentStepKey });
   }
@@ -81,7 +83,9 @@ export async function completeWorkflowStep(db: Db, companyId: string, runId: str
   if (!current) throw conflict(`Step "${stepKey}" is not open`, { code: "workflow_step_not_current" });
   const spec = await loadRunSpec(db, run);
   const step = findStep(spec, stepKey);
-  assertStepActor(actor, step);
+  if (waitingOnPerson && step.type !== "human_task") throw conflict("Workflow run is waiting for a person", { code: "workflow_run_not_running" });
+  if (step.type === "human_task") await assertHumanStepActor(db, companyId, actor, step);
+  else assertStepActor(actor, step);
 
   const [caseRow] = await db.select({ workIssueId: cases.workIssueId }).from(cases).where(eq(cases.id, run.caseId));
   const outputs = await collectOutputs(db, caseRow!.workIssueId!, step.outputs);
@@ -98,13 +102,14 @@ export async function completeWorkflowStep(db: Db, companyId: string, runId: str
   }
 
   const prepared = plan.kind === "advance"
-    ? await prepareNextStep(db, { companyId, run, spec, plan, actor, summary: input.summary ?? null, originAgentId: current.assigneeAgentId })
+    ? await prepareNextStep(db, { companyId, run, spec, plan, actor, summary: input.summary ?? null, originAgentId: current.assigneeAgentId,
+      ...(step.type === "human_task" ? { fromHumanStep: { parkedAgentId: current.assigneeAgentId } } : {}) })
     : null;
 
   await writeWithActivity(db, async (tx, publications) => {
     const [locked] = await tx.select().from(workflowRuns).where(eq(workflowRuns.id, runId)).for("update");
     const stillOpen = await openStep(tx, runId, stepKey);
-    if (!locked || locked.status !== "running" || locked.currentStepKey !== stepKey || stillOpen?.id !== current.id) return;
+    if (!locked || locked.status !== run.status || locked.currentStepKey !== stepKey || stillOpen?.id !== current.id) return;
     await tx.insert(workflowRunEvents).values({ runId, companyId, kind: "step_completed",
       eventKey: completionEventKey(stepKey, current.attempt, input.idempotencyKey), ...eventActor(actor),
       payload: { stepKey, attempt: current.attempt, outcome: input.outcome, summary: input.summary ?? null } });
@@ -131,6 +136,7 @@ function planActivity(plan: Exclude<StepOutcomePlan, { kind: "invalid_outcome" }
 export type PreparedNextStep =
   | { kind: "handoff"; handoffId: string }
   | { kind: "gate"; decisionId: string }
+  | { kind: "human"; assigned: boolean; parkedAgentId: string | null }
   | { kind: "blocked"; reason: string };
 
 /**
@@ -147,8 +153,14 @@ export async function prepareNextStep(db: Db, input: {
   originAgentId: string | null;
   /** A gate resolution has no caller to retry, so a failed transfer becomes a wait for a person. */
   escalateHandoffFailure?: boolean;
+  /** Leaving a human step: the agent that held the task before it, which gets it back for the handoff. */
+  fromHumanStep?: { parkedAgentId: string | null };
 }): Promise<PreparedNextStep> {
   const next = findStep(input.spec, input.plan.stepKey);
+  if (next.type === "human_task") {
+    const assignment = await assignHumanStep(db, { caseId: input.run.caseId, step: next });
+    return { kind: "human", ...assignment, parkedAgentId: input.fromHumanStep?.parkedAgentId ?? assignment.parkedAgentId };
+  }
   if (next.type === "approval_gate") {
     const { openGate } = await import("./workflow-run-gates.js");
     return openGate(db, { companyId: input.companyId, run: input.run, spec: input.spec, step: next,
@@ -157,6 +169,9 @@ export async function prepareNextStep(db: Db, input: {
   const [workflow] = await db.select({ name: workflows.name }).from(workflows).where(eq(workflows.id, input.run.workflowId));
   const [version] = await db.select({ version: workflowVersions.version }).from(workflowVersions)
     .where(eq(workflowVersions.id, input.run.versionId));
+  if (input.fromHumanStep) {
+    await returnTaskFromPerson(db, { caseId: input.run.caseId, parkedAgentId: input.fromHumanStep.parkedAgentId, nextAgentId: next.owner.ref });
+  }
   try {
     const handoff = await caseHandoffService(db).handoff(input.companyId, input.actor, {
       idempotencyKey: `workflow-run:${input.run.id}:${next.key}:${input.plan.attempt}`,
@@ -187,15 +202,18 @@ export async function applyPlan(tx: Db, input: {
   const actor = input.actor ? eventActor(input.actor) : { actorType: "system", actorId: "workflow-run" };
   if (input.plan.kind === "advance" && input.prepared && input.prepared.kind !== "blocked") {
     const next = findStep(input.spec, input.plan.stepKey);
-    const gate = input.prepared.kind === "gate";
+    const human = input.prepared.kind === "human" ? input.prepared : null;
+    const gate = input.prepared.kind === "gate" || human !== null;
     await tx.insert(workflowRunSteps).values({ runId: input.runId, companyId: input.companyId, stepKey: next.key,
-      attempt: input.plan.attempt, status: gate ? "awaiting_approval" : "running",
-      assigneeAgentId: next.owner.kind === "agent" ? next.owner.ref : null,
+      attempt: input.plan.attempt,
+      status: human ? (human.assigned ? "running" : "ready") : input.prepared.kind === "gate" ? "awaiting_approval" : "running",
+      assigneeAgentId: human ? human.parkedAgentId : next.owner.kind === "agent" ? next.owner.ref : null,
       assigneeUserId: next.owner.kind === "user" ? next.owner.ref : null,
       handoffId: input.prepared.kind === "handoff" ? input.prepared.handoffId : null,
       decisionId: input.prepared.kind === "gate" ? input.prepared.decisionId : null });
     await tx.update(workflowRuns).set({ currentStepKey: next.key, status: gate ? "waiting_human" : "running",
-      statusReason: gate ? `Waiting for a decision on "${next.name}"` : null, updatedAt: now }).where(eq(workflowRuns.id, input.runId));
+      statusReason: human ? `Waiting for ${next.owner.ref} on "${next.name}"` : gate ? `Waiting for a decision on "${next.name}"` : null,
+      updatedAt: now }).where(eq(workflowRuns.id, input.runId));
     if (input.prepared.kind === "gate") {
       const { decisionId } = input.prepared;
       await tx.insert(workflowRunEvents).values({ runId: input.runId, companyId: input.companyId,
