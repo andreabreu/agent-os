@@ -192,9 +192,9 @@ Monorepo pnpm: `packages/db`, `packages/shared`, `server`. Sem UI nesta fase. Ar
 
 **Independent Test**: seção "PR 2c" do `quickstart.md`, passo 2.
 
-- [ ] T052 [P] [US6] Acrescentar em `server/src/__tests__/workflow-runs-advance.integration.test.ts` os casos de runtime: o motor não inicia uma etapa com `externalEffect` sem gate aprovado antes; gate rejeitado não executa a etapa externa
-- [ ] T053 [US6] Em `server/src/services/workflow-run-advance.ts`, bloquear o início de etapa com `externalEffect` sem gate aprovado como antecessor imediato, escalando a `waiting_human` com o motivo (defesa em profundidade; a regra de publicação já é de T005)
-- [ ] T054 [US6] Rodar T052 e `packages/shared/src/workflow-spec-graph.test.ts`; tudo verde
+- [X] T052 [P] [US6] Acrescentar em `server/src/__tests__/workflow-runs-advance.integration.test.ts` os casos de runtime: o motor não inicia uma etapa com `externalEffect` sem gate aprovado antes; gate rejeitado não executa a etapa externa
+- [X] T053 [US6] (Revisado: o início do run já aplica as regras de grafo à versão fixada, então uma checagem no avanço seria inalcançável e não foi acrescentada; o teste prova a recusa de uma versão antiga) Em `server/src/services/workflow-run-advance.ts`, bloquear o início de etapa com `externalEffect` sem gate aprovado como antecessor imediato, escalando a `waiting_human` com o motivo (defesa em profundidade; a regra de publicação já é de T005)
+- [X] T054 [US6] Rodar T052 e `packages/shared/src/workflow-spec-graph.test.ts`; tudo verde
 
 ---
 

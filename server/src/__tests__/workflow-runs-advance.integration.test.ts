@@ -381,6 +381,22 @@ describe("workflow runs with agent steps", () => {
     expect(refused.body.details?.code).toBe("workflow_not_executable");
   });
 
+  it("refuses to run a version saved before the external-effect rule existed", async () => {
+    await enableFlags();
+    const f = await fixture();
+    const unsafe = { ...f.spec, steps: f.spec.steps.map((step) => step.key === "write" ? { ...step, externalEffect: true } : step) };
+    const [legacy] = await db.insert(workflowVersions).values({ companyId: f.companyId, workflowId: f.workflowId, version: 2,
+      spec: unsafe, specHash: "legacy-version-before-the-rule" }).returning();
+    await db.update(workflows).set({ latestVersionId: legacy!.id, latestVersionNumber: 2 }).where(eq(workflows.id, f.workflowId));
+
+    const refused = await request(appFor()).post(`/api/companies/${f.companyId}/workflow-runs`)
+      .send({ workflowId: f.workflowId, caseId: f.caseId }).expect(422);
+
+    expect(refused.body.details).toMatchObject({ code: "workflow_not_executable" });
+    expect(refused.body.details.issues).toEqual([expect.objectContaining({ code: "external_effect_without_gate", stepKey: "write" })]);
+    expect(await db.select().from(workflowRuns)).toHaveLength(0);
+  });
+
   it("lets agents find the run routes through the generic API tools", () => {
     const operations = runnerApiCatalog().map((operation) => `${operation.method.toUpperCase()} ${operation.path}`);
 

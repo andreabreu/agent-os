@@ -81,6 +81,7 @@ Levantamento no `master` (`1a57a2abec`) para a spec 002. Os itens marcados "Spik
 
 - **Decisão**: regra de validação do grafo na publicação: toda etapa com `externalEffect: true` tem um `approval_gate` aprovado como antecessor imediato em todos os caminhos. Em execução, o avançador não inicia a etapa externa sem o gate aprovado.
 - Acrescenta um código `external_effect_without_gate` aos erros de `validateWorkflowGraph`.
+- **Revisado na implementação:** a defesa em profundidade fica no início do run, que roda `isExecutableWorkflowSpec` sobre a versão em que o run vai ficar preso; uma versão gravada antes da regra é recusada com `422 workflow_not_executable`. Como o run nunca troca de versão, uma checagem extra no avanço seria inalcançável.
 
 ## R10. Lembretes e tempo de espera
 
