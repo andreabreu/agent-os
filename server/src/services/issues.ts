@@ -12546,6 +12546,7 @@ export function issueService(db: Db) {
           );
         }
         const enteredBlocked = updated.status === "blocked" && receiptExisting.status !== "blocked";
+        if (enteredBlocked) await notifyDeliveryWork(tx, DELIVERY_QUEUES.workflowRunRecovery, updated.companyId);
         emitTaskStatusTransitionAfterCommit({
           companyId: updated.companyId,
           previousStatus: receiptExisting.status,

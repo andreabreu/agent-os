@@ -22,6 +22,7 @@ import {
   heartbeatRuns,
   issueComments,
   issueDocuments,
+  issueRecoveryActions,
   issues,
   workflowRunEvents,
   workflowRunSteps,
@@ -68,6 +69,7 @@ describe("workflow run control", () => {
     await db.delete(documentRevisions);
     await db.delete(documents);
     await db.delete(issueComments);
+    await db.delete(issueRecoveryActions);
     await db.update(issues).set({ executionRunId: null, checkoutRunId: null });
     await db.delete(issues);
     await db.delete(heartbeatRuns);
@@ -273,6 +275,48 @@ describe("workflow run control", () => {
     expect(reopened.decision!.id).not.toBe(first.decision!.id);
     expect(reopened.decision!.status).toBe("open");
     expect(await runRow(f.runId)).toMatchObject({ status: "waiting_human", currentStepKey: "approval" });
+  });
+
+  it("waits for a person when the platform gives up on the agent's work, and resumes after", async () => {
+    const f = await fixture();
+    await db.update(issues).set({ status: "blocked" }).where(eq(issues.id, f.taskId));
+    await db.insert(issueRecoveryActions).values({ companyId: f.companyId, sourceIssueId: f.taskId, kind: "run_recovery",
+      status: "active", ownerType: "board", cause: "native_session_retry_exhausted", fingerprint: `stall:${f.taskId}`,
+      nextAction: "Retry or reassign" });
+
+    await recoverWorkflowRuns(db);
+
+    const stuck = await runRow(f.runId);
+    expect(stuck.status).toBe("waiting_human");
+    expect(stuck.statusReason).toMatch(/native_session_retry_exhausted/);
+
+    await recoverWorkflowRuns(db);
+    const escalations = await db.select().from(workflowRunEvents)
+      .where(and(eq(workflowRunEvents.runId, f.runId), eq(workflowRunEvents.kind, "escalated")));
+    expect(escalations).toHaveLength(1);
+
+    await request(appAs(board)).post(`/api/workflow-runs/${f.runId}/resume`).send({}).expect(200);
+    expect(await runRow(f.runId)).toMatchObject({ status: "running", currentStepKey: "research" });
+  });
+
+  it("keeps running while the task is blocked only by a dependency", async () => {
+    const f = await fixture();
+    await db.update(issues).set({ status: "blocked" }).where(eq(issues.id, f.taskId));
+
+    await recoverWorkflowRuns(db);
+
+    expect(await runRow(f.runId)).toMatchObject({ status: "running" });
+  });
+
+  it("waits for a person when the current step's agent was terminated", async () => {
+    const f = await fixture();
+    await db.update(agents).set({ status: "terminated" }).where(eq(agents.id, f.researcher));
+
+    await recoverWorkflowRuns(db);
+
+    const stuck = await runRow(f.runId);
+    expect(stuck.status).toBe("waiting_human");
+    expect(stuck.statusReason).toMatch(/no longer active/);
   });
 
   it("refuses to resume a run that is not waiting", async () => {

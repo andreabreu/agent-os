@@ -1,5 +1,5 @@
 import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
-import { agents, companies, companyMemberships, decisions, workflowRunEvents, workflowRunSteps, workflowRuns, type Db } from "@paperclipai/db";
+import { agents, cases, companies, companyMemberships, decisions, issueRecoveryActions, issues, workflowRunEvents, workflowRunSteps, workflowRuns, type Db } from "@paperclipai/db";
 import { WORKFLOW_RUN_ACTIVE_STATUSES } from "@paperclipai/shared";
 import { conflict, forbidden } from "../errors.js";
 import { logger } from "../middleware/logger.js";
@@ -8,6 +8,7 @@ import { persistActivity } from "./activity-log.js";
 import type { AuthorizationActor } from "./authorization.js";
 import { requireWorkflowVersionsEnabled } from "./workflow-versions.js";
 import { findStep, loadRun, loadRunSpec, readRunView, runActivityActor, writeWithActivity } from "./workflow-runs.js";
+import { escalateRun } from "./workflow-run-advance.js";
 import { gateReopenCount, onWorkflowGateResolved, openGate } from "./workflow-run-gates.js";
 import { assignReadyHumanSteps } from "./workflow-run-human.js";
 
@@ -161,10 +162,53 @@ async function syncBudgetPause(db: Db, run: RunRow) {
   }
 }
 
+const HUMAN_RECOVERY_OWNERS = ["user", "board"];
+const OPEN_RECOVERY_STATUSES = ["active", "escalated"];
+
+async function stuckAgentReason(db: Db, step: typeof workflowRunSteps.$inferSelect, task: typeof issues.$inferSelect) {
+  const [agent] = await db.select({ status: agents.status }).from(agents).where(eq(agents.id, step.assigneeAgentId!));
+  if (!agent || agent.status === "terminated") return `The agent of step "${step.stepKey}" is no longer active`;
+  if (task.status !== "blocked") return null;
+  const [action] = await db.select({ cause: issueRecoveryActions.cause, nextAction: issueRecoveryActions.nextAction })
+    .from(issueRecoveryActions).where(and(eq(issueRecoveryActions.sourceIssueId, task.id),
+      inArray(issueRecoveryActions.status, OPEN_RECOVERY_STATUSES), inArray(issueRecoveryActions.ownerType, HUMAN_RECOVERY_OWNERS)))
+    .orderBy(desc(issueRecoveryActions.createdAt)).limit(1);
+  return action ? `Agent work on step "${step.stepKey}" needs a person: ${action.cause}. ${action.nextAction}` : null;
+}
+
 /**
- * The run's recovery pass, run at startup and whenever budget pauses change or a run asks for it.
+ * Lets the run wait for a person when the platform has given up on its current agent step: the task is blocked
+ * with a recovery action owned by a person or the board, or the step's agent is no longer active. The platform
+ * already retries failed runs with its own limits, so the run does not retry them again.
+ */
+async function escalateStuckAgentSteps(db: Db) {
+  const running = await db.select({ run: workflowRuns, step: workflowRunSteps, task: issues }).from(workflowRuns)
+    .innerJoin(workflowRunSteps, and(eq(workflowRunSteps.runId, workflowRuns.id), eq(workflowRunSteps.stepKey, workflowRuns.currentStepKey),
+      eq(workflowRunSteps.status, "running")))
+    .innerJoin(cases, eq(cases.id, workflowRuns.caseId))
+    .innerJoin(issues, eq(issues.id, cases.workIssueId))
+    .where(and(eq(workflowRuns.status, "running"), sql`${workflowRunSteps.assigneeAgentId} is not null`,
+      sql`${workflowRunSteps.assigneeUserId} is null`))
+    .limit(RECOVERY_BATCH);
+  for (const { run, step, task } of running) {
+    const reason = await stuckAgentReason(db, step, task);
+    if (!reason) continue;
+    await writeWithActivity(db, async (tx, publications) => {
+      const [locked] = await tx.select({ status: workflowRuns.status }).from(workflowRuns).where(eq(workflowRuns.id, run.id)).for("update");
+      if (locked?.status !== "running") return;
+      await escalateRun(tx, { companyId: run.companyId, runId: run.id, reason, actor: SYSTEM_ACTOR });
+      publications.push((await persistActivity(tx, { companyId: run.companyId, actorType: "system", actorId: "workflow-run",
+        runId: null, action: "workflow_run.escalated", entityType: "workflow_run", entityId: run.id,
+        details: { stepKey: step.stepKey, attempt: step.attempt, reason } })).publication);
+    });
+  }
+}
+
+/**
+ * The run's recovery pass, run at startup and whenever budget pauses change or a task enters Blocked.
  * It mirrors budget pauses on runs, processes gate decisions a run was never told about without deciding for
- * anyone, and gives waiting human steps to their person once no run holds the task. Each step is bounded and idempotent.
+ * anyone, gives waiting human steps to their person once no run holds the task, and lets a run wait for a person
+ * when the platform gives up on its agent step. Each step is bounded and idempotent.
  */
 export async function recoverWorkflowRuns(db: Db) {
   const active = await db.select().from(workflowRuns)
@@ -188,5 +232,6 @@ export async function recoverWorkflowRuns(db: Db) {
     }
   }
   await assignReadyHumanSteps(db, RECOVERY_BATCH);
+  await escalateStuckAgentSteps(db);
 }
 

@@ -73,7 +73,7 @@ Levantamento no `master` (`1a57a2abec`) para a spec 002. Os itens marcados "Spik
 - **Spike S5**: localizar o ponto de publicação da pausa.
 
 - **Spike S5 (resolvido):** a pausa e a retomada por orçamento ficam em `pauseScopeForBudget` e `resumeScopeFromBudget` (`budgets.ts`). A plataforma já impede que agentes rodem num escopo pausado, então a invariante vale para os runs sem mudança. Cada função ganhou um aviso de uma linha à fila `workflow-run-recovery`; o passe marca o run `paused` (empresa ou agente da etapa atual pausados por orçamento) e restaura o status anterior quando a pausa termina. Durante a pausa, concluir uma etapa é recusado com `409` e a resolução de um gate espera.
-- **Falha de agente (T038) adiada:** a plataforma já repete runs que falham, com limite, e expõe ações de recuperação. Repetir de novo no motor duplicaria essa lógica, e detectar a falha final exigiria outro gancho no heartbeat. Fica para uma iteração própria.
+- **Falha de agente (T038), implementada sem repetir tentativas:** a plataforma já repete runs que falham, com limite, e quando desiste deixa a tarefa `blocked` com uma ação de recuperação aberta para uma pessoa ou para o board. O passe de recuperação trata isso como o fim das tentativas: um run com etapa de agente em andamento passa a `waiting_human`, com a causa e a próxima ação da recuperação como motivo. Também escala quando o agente da etapa foi encerrado (`terminated`). Uma tarefa bloqueada só por dependência não escala. O `issueService.update` avisa a fila do passe quando uma tarefa entra em `blocked` (uma linha). Depois que alguém resolve, `resume` continua a etapa.
 
 ## R9. Efeito externo
 
