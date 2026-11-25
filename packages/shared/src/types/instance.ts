@@ -92,6 +92,8 @@ export interface InstanceExperimentalSettings {
   /** Show and allow the AWS connector (minted per-connection AWS credentials). */
   enableAwsConnector: boolean;
   enableCases: boolean;
+  /** Versioned workflow definitions, default execution policies, stage reassignment, and routine workflow targets. Requires `enableCases`. */
+  enableWorkflowVersions: boolean;
   enableAgentChat: boolean;
   /** Reorganized left nav, Inbox-as-Tasks-views, and the chat agent rail + task cards. */
   enableCombinedInboxTasks: boolean;

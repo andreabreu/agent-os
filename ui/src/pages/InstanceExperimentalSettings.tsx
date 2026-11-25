@@ -242,6 +242,11 @@ export function InstanceExperimentalSettings() {
   const enableResponsibilities = experimentalQuery.data?.enableResponsibilities === true;
   const enableGoalsSidebarLink = experimentalQuery.data?.enableGoalsSidebarLink === true;
   const enableCases = experimentalQuery.data?.enableCases === true;
+  const enableWorkflowVersions = experimentalQuery.data?.enableWorkflowVersions === true;
+  const casesManaged = managedKeys.enableCases?.managed === true;
+  const workflowVersionsManaged = managedKeys.enableWorkflowVersions?.managed === true;
+  const workflowVersionsBlockedByManagedCases = casesManaged && !enableCases;
+  const casesRequiredByManagedWorkflowVersions = workflowVersionsManaged && enableWorkflowVersions;
   const enableServerInfoDebugView = experimentalQuery.data?.enableServerInfoDebugView === true;
   const enablePaperclipDeveloperMode =
     experimentalQuery.data?.enablePaperclipDeveloperMode === true;
@@ -357,10 +362,16 @@ export function InstanceExperimentalSettings() {
         <ExperimentalToggleCard
           title="Cases"
           description="Durable work products (blog posts, tweet storms…) that tasks create and iterate on. Adds the Cases tab and the agent case API."
-          footnote="Turning Cases off hides the tab and blocks the case API; existing case data is kept."
+          footnote="Turning Cases off hides the tab and blocks the case API; existing case data is kept. Disabling Cases also disables Workflow versions."
           checked={enableCases}
-          onCheckedChange={(checked) => toggleMutation.mutate({ enableCases: checked })}
-          disabled={toggleMutation.isPending}
+          onCheckedChange={(checked) =>
+            toggleMutation.mutate(
+              checked || !enableWorkflowVersions
+                ? { enableCases: checked }
+                : { enableCases: false, enableWorkflowVersions: false },
+            )
+          }
+          disabled={toggleMutation.isPending || casesRequiredByManagedWorkflowVersions}
           settingKey="enableCases"
           managed={managedKeys.enableCases}
           ariaLabel="Toggle cases experimental setting"
@@ -668,6 +679,24 @@ export function InstanceExperimentalSettings() {
             ariaLabel="Toggle isolated workspaces by default experimental setting"
           />
         )}
+
+        <ExperimentalToggleCard
+          title="Workflow versions"
+          description="Publish immutable, validated workflow versions, set default execution policies for companies and projects, hand a pending review stage to another participant, and let routines start a workflow."
+          footnote="Enabling Workflow versions also enables Cases. Existing workflow data is kept when this is disabled."
+          checked={enableWorkflowVersions}
+          onCheckedChange={(checked) =>
+            toggleMutation.mutate(
+              checked
+                ? { enableCases: true, enableWorkflowVersions: true }
+                : { enableWorkflowVersions: false },
+            )
+          }
+          disabled={toggleMutation.isPending || workflowVersionsBlockedByManagedCases}
+          settingKey="enableWorkflowVersions"
+          managed={managedKeys.enableWorkflowVersions}
+          ariaLabel="Toggle workflow versions experimental setting"
+        />
       </section>
 
       {showDeveloperSection ? (

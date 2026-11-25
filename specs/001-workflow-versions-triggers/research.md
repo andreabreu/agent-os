@@ -20,7 +20,7 @@ Levantamento feito no `master` (`1a57a2abec`) e nas PRs upstream #15267 e #15265
 
 - **Decisão**: nova chave `enableWorkflowVersions` (padrão `false`) em `instanceExperimentalSettingsSchema` e entrada em `INSTANCE_FEATURE_CATALOG`. O guarda é `requireCasesEnabled` mais a própria flag.
 - **Racional**: o catálogo é derivado do schema e quebra a compilação se faltar entrada; reusar `enableCases` impediria ligar só os Cases. `workflow_runs` por case na fase 2 também depende de Cases.
-- **A confirmar na implementação**: se a página de settings experimentais lista o catálogo automaticamente ou precisa de entrada manual.
+- **Confirmado na implementação (T002)**: a página `ui/src/pages/InstanceExperimentalSettings.tsx` não lê o catálogo; cada flag tem um cartão manual. O cartão novo segue o par Summaries e Status Cards: ligar Workflow versions liga Cases, e desligar Cases desliga Workflow versions. `server/src/services/instance-settings.ts` também lista cada flag explicitamente. A lista `CLOUD_STAGING_EXPERIMENTAL_KEYS` de `cloud-instance.ts` não foi alterada, por ser política de deployment.
 
 ## R4. Alvo de workflow na rotina
 

@@ -29,10 +29,10 @@ Monorepo pnpm: `packages/db`, `packages/shared`, `server`. A UI não muda nesta 
 
 **Purpose**: flag experimental, base para todas as histórias que expõem rotas novas
 
-- [ ] T000 Preparar o ambiente: `node_modules` não existe no checkout; rodar `node scripts/agent-preflight.mjs` e `pnpm install`, e confirmar que `pnpm exec vitest run packages/shared/src/account-handle.test.ts` passa (comando de teste de arquivo único usado nas tarefas abaixo; alternativa `pnpm verify`)
-- [ ] T001 Adicionar a chave booleana `enableWorkflowVersions` (padrão `false`) a `instanceExperimentalSettingsSchema` em `packages/shared/src/validators/instance.ts` e a entrada correspondente em `INSTANCE_FEATURE_CATALOG` em `packages/shared/src/feature-catalog.ts` (`tier: "managed"`, `cloudDefault: false`, `selfHostedDefault: false`)
-- [ ] T002 Verificar se a página de settings experimentais lista o catálogo automaticamente e, se não, adicionar a entrada manual (procurar o consumo de `INSTANCE_FEATURE_CATALOG` em `ui/src/pages/`); registrar o resultado em `specs/001-workflow-versions-triggers/research.md` (item R3)
-- [ ] T003 Rodar os testes existentes do catálogo (`packages/shared/src/feature-catalog*.test.ts`, `packages/shared/src/connector-availability.test.ts`) e confirmar que a nova flag não quebra a regra "selfHostedDefault igual ao padrão do schema"
+- [X] T000 Preparar o ambiente: `node_modules` não existe no checkout; rodar `node scripts/agent-preflight.mjs` e `pnpm install`, e confirmar que `pnpm exec vitest run packages/shared/src/account-handle.test.ts` passa (comando de teste de arquivo único usado nas tarefas abaixo; alternativa `pnpm verify`)
+- [X] T001 Adicionar a chave booleana `enableWorkflowVersions` (padrão `false`) a `instanceExperimentalSettingsSchema` em `packages/shared/src/validators/instance.ts` e a entrada correspondente em `INSTANCE_FEATURE_CATALOG` em `packages/shared/src/feature-catalog.ts` (`tier: "managed"`, `cloudDefault: false`, `selfHostedDefault: false`)
+- [X] T002 Verificar se a página de settings experimentais lista o catálogo automaticamente e, se não, adicionar a entrada manual (procurar o consumo de `INSTANCE_FEATURE_CATALOG` em `ui/src/pages/`); registrar o resultado em `specs/001-workflow-versions-triggers/research.md` (item R3)
+- [X] T003 Rodar os testes existentes do catálogo (`packages/shared/src/feature-catalog*.test.ts`, `packages/shared/src/connector-availability.test.ts`) e confirmar que a nova flag não quebra a regra "selfHostedDefault igual ao padrão do schema"
 
 ---
 
