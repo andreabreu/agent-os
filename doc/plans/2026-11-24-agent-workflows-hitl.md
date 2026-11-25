@@ -4,6 +4,8 @@ Nov 24, 2026 · @Andre Abreu
 
 Revisado em 2026-11-24 contra o `master` (`1a57a2abec`).
 
+**Estado (2026-11-25):** fase 1 especificada e implementada em `specs/001-workflow-versions-triggers/` (comportamento em `doc/workflow-versions.md`). Fase 2 especificada em `specs/002-workflow-runs-hitl/`.
+
 ## Resumo
 
 É viável, e a maior parte das peças já existe. O agent-os (Paperclip) já tem handoffs entre agentes, revisões e aprovações por tarefa, perguntas ao humano no thread, decisões com fila e wake do agente, dependências entre tarefas e rotinas. O que falta é um workflow **declarativo e executado pelo servidor**: hoje o "workflow" do experimento Cases é só um nome mais um prompt em Markdown, e as transições são advisory (o agente lê e decide).

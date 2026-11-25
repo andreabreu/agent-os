@@ -171,11 +171,11 @@ Monorepo pnpm: `packages/db`, `packages/shared`, `server`. A UI não muda nesta 
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T046 [P] Escrever `doc/workflow-versions.md` com o comportamento do subsistema (versões imutáveis, validação de grafo, política padrão, reassign, alvo de rotina, limitação de revisões de rotina, flag) e linkar em "More documentation" de `doc/DEVELOPING.md`
-- [ ] T047 [P] Conferir que nenhum arquivo novo passa de 1.000 linhas e que os acréscimos em `server/src/services/issues.ts`, `server/src/services/routines.ts` e `server/src/app.ts` são pontos de extensão curtos (regra `pull-request-review`)
+- [X] T046 [P] Escrever `doc/workflow-versions.md` com o comportamento do subsistema (versões imutáveis, validação de grafo, política padrão, reassign, alvo de rotina, limitação de revisões de rotina, flag) e linkar em "More documentation" de `doc/DEVELOPING.md`
+- [X] T047 [P] Conferir que nenhum arquivo novo passa de 1.000 linhas e que os acréscimos em `server/src/services/issues.ts`, `server/src/services/routines.ts` e `server/src/app.ts` são pontos de extensão curtos (regra `pull-request-review`)
 - [ ] T048 Rodar `pnpm -r typecheck` (ou `node scripts/typecheck-low-memory.mjs`) e `pnpm verify`; se `pnpm verify` sair com código 2, rodar os checks focados e registrar o que ficou para o CI, sem `--full` automático
 - [ ] T049 Executar o quickstart (`specs/001-workflow-versions-triggers/quickstart.md`) de ponta a ponta numa instância de dev com as duas flags ligadas e registrar o resultado
-- [ ] T050 Atualizar `doc/plans/2026-11-24-agent-workflows-hitl.md` marcando a fase 1 como especificada e linkando `specs/001-workflow-versions-triggers/`
+- [X] T050 Atualizar `doc/plans/2026-11-24-agent-workflows-hitl.md` marcando a fase 1 como especificada e linkando `specs/001-workflow-versions-triggers/`
 
 ---
 
