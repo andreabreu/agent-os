@@ -3536,6 +3536,13 @@
       "when": 1795574830564,
       "tag": "0506_shiny_fantastic_four",
       "breakpoints": true
+    },
+    {
+      "idx": 507,
+      "version": "7",
+      "when": 1795612909781,
+      "tag": "0507_outgoing_anthem",
+      "breakpoints": true
     }
   ]
 }
