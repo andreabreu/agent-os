@@ -44,6 +44,9 @@ Levantamento no `master` (`1a57a2abec`) para a spec 002. Os itens marcados "Spik
 - **Decisão**: o servidor reatribui a tarefa do case à pessoa declarada, como a execution policy faz nos estágios (`applyIssueExecutionPolicyTransition`). Ao concluir, o usuário usa a mesma operação de conclusão de etapa.
 - **Spike S1**: confirmar o mecanismo exato e a autoridade necessária, já que o handoff só transfere para agentes (`Only agent handoffs can transfer a task`).
 
+- **Spike S1 (resolvido em parte):** o handoff só transfere entre agentes: `apply` recusa ("superseded") uma tarefa com `assigneeUserId`. Decisão do dono do produto (2026-11-25): a pessoa fica com a tarefa durante a etapa humana e o motor a devolve direto ao agente da etapa seguinte, sem handoff nesse salto.
+- **Obstáculo restante:** quando a etapa anterior é de um agente, ele conclui de dentro da própria run, que segue em execução. O handoff espera a liberação da run (`awaiting_release`); uma reatribuição direta à pessoa pularia essa espera e o tratamento de "self-handoff" para runs nativas do `PATCH` de tarefas (`recordNativeHumanSelfHandoff`), e a run do agente pode ser recusada na finalização. A reatribuição precisa acontecer na liberação da run, como o handoff faz em `heartbeat/case-handoff-lifecycle.ts`.
+
 ## R5. Formulário
 
 - **Decisão**: interação `ask_user_questions` na tarefa do case, com os tipos de pergunta da spec mapeados para `selectionMode` e `required` existentes; ao responder, as respostas viram um documento do case na chave de saída da etapa.
