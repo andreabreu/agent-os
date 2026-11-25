@@ -1,6 +1,6 @@
 # Contrato: versões de workflow
 
-Todas as rotas exigem `enableCases` e `enableWorkflowVersions` (senão `404` com o erro padrão de recurso desligado) e acesso à empresa dona do workflow. Mutações vão para o activity log.
+Todas as rotas exigem `enableCases` e `enableWorkflowVersions` (senão `403` com `code: "cases_disabled"` ou `code: "workflow_versions_disabled"`) e acesso à empresa dona do workflow. Mutações vão para o activity log.
 
 | Método e caminho | Quem | Corpo | Resposta |
 | --- | --- | --- | --- |
@@ -14,7 +14,8 @@ Todas as rotas exigem `enableCases` e `enableWorkflowVersions` (senão `404` com
 | Código | Quando |
 | --- | --- |
 | `404` | Workflow ou versão inexistente, ou de outra empresa |
-| `409` | Snapshot de leitura paginada obsoleto |
+| `409` | Snapshot de leitura paginada obsoleto, ou publicação num workflow arquivado |
+| `400` | Spec malformado (schema); nada é gravado |
 | `422` | Spec inválido; `details.issues[]` traz `{ code, stepKey, outcomeKey?, message }` |
 
 Códigos de validação de grafo: `duplicate_step_key`, `start_not_found`, `unknown_destination`, `unreachable_step`, `no_path_to_end`, `unbounded_cycle`, `unsupported_step_type`.
