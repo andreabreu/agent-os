@@ -229,10 +229,10 @@ Monorepo pnpm: `packages/db`, `packages/shared`, `server`. Sem UI nesta fase. Ar
 
 **Independent Test**: seção "PR 2c" do `quickstart.md`, passo 5.
 
-- [ ] T062 [P] [US10] Criar `packages/shared/src/workflow-simulate.test.ts` com testes (falhando) de `simulateWorkflow(spec, script)`: percurso etapa a etapa, estado final, ciclo termina no `maxReviewRounds` com escalonamento, `maxAttempts`, gate com cada outcome, formulário e etapa humana simulados, `script` incompleto recusado; um workflow de 20 etapas é simulado em até 5 s (SC-010)
-- [ ] T063 [US10] Criar `packages/shared/src/workflow-simulate.ts` (puro, sem banco) e exportar em `packages/shared/src/index.ts`
-- [ ] T064 [US10] Criar `server/src/routes/workflow-simulate.ts` com `POST /api/workflows/:id/simulate` conforme `contracts/workflow-runs.md` (lê só a definição, nunca grava, `assertCompanyAccess`), montar em `server/src/app.ts` e documentar em `server/src/routes/openapi.ts`; acrescentar um teste em `server/src/__tests__/workflow-runs-control.integration.test.ts` que confirma 0 linhas novas em `cases`, `workflow_runs`, `decisions` e `issues` depois da simulação
-- [ ] T065 [US10] Rodar T062 e o teste do T064; tudo verde
+- [X] T062 [P] [US10] Criar `packages/shared/src/workflow-simulate.test.ts` com testes (falhando) de `simulateWorkflow(spec, script)`: percurso etapa a etapa, estado final, ciclo termina no `maxReviewRounds` com escalonamento, `maxAttempts`, gate com cada outcome, formulário e etapa humana simulados, `script` incompleto recusado; um workflow de 20 etapas é simulado em até 5 s (SC-010)
+- [X] T063 [US10] Criar `packages/shared/src/workflow-simulate.ts` (puro, sem banco) e exportar em `packages/shared/src/index.ts`
+- [X] T064 [US10] Criar `server/src/routes/workflow-simulate.ts` com `POST /api/workflows/:id/simulate` conforme `contracts/workflow-runs.md` (lê só a definição, nunca grava, `assertCompanyAccess`), montar em `server/src/app.ts` e documentar em `server/src/routes/openapi.ts`; acrescentar um teste em `server/src/__tests__/workflow-runs-control.integration.test.ts` que confirma 0 linhas novas em `cases`, `workflow_runs`, `decisions` e `issues` depois da simulação
+- [X] T065 [US10] Rodar T062 e o teste do T064; tudo verde
 
 ---
 

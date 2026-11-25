@@ -33,6 +33,7 @@ import {
 import { startEmbeddedPostgresTestDatabase } from "./helpers/embedded-postgres.js";
 import { errorHandler } from "../middleware/error-handler.js";
 import { workflowRunRoutes } from "../routes/workflow-runs.js";
+import { workflowSimulateRoutes } from "../routes/workflow-simulate.js";
 import { recoverWorkflowRuns } from "../services/workflow-run-control.js";
 import { caseHandoffService } from "../services/case-handoffs.js";
 import { caseHandoffDeliveryService } from "../services/case-handoff-delivery.js";
@@ -317,6 +318,30 @@ describe("workflow run control", () => {
     const stuck = await runRow(f.runId);
     expect(stuck.status).toBe("waiting_human");
     expect(stuck.statusReason).toMatch(/no longer active/);
+  });
+
+  it("simulates the latest version with scripted outcomes and creates nothing", async () => {
+    const f = await fixture();
+    const [run] = await db.select({ workflowId: workflowRuns.workflowId }).from(workflowRuns).where(eq(workflowRuns.id, f.runId));
+    const counts = async () => Promise.all([cases, workflowRuns, decisions, issues].map(async (table) =>
+      (await db.select().from(table)).length));
+    const before = await counts();
+    const app = express();
+    app.use(express.json());
+    app.use((req, _res, next) => { (req as { actor?: unknown }).actor = board; next(); });
+    app.use("/api", workflowSimulateRoutes(db));
+    app.use(errorHandler);
+
+    const simulated = await request(app).post(`/api/workflows/${run!.workflowId}/simulate`)
+      .send({ script: { research: ["done"], approval: ["changes_requested", "approved"], publish: ["done"] } }).expect(200);
+    const incomplete = await request(app).post(`/api/workflows/${run!.workflowId}/simulate`)
+      .send({ script: { research: ["done"] } }).expect(200);
+
+    expect(simulated.body).toMatchObject({ ok: true, final: "completed" });
+    expect(simulated.body.path.map((step: { stepKey: string }) => step.stepKey))
+      .toEqual(["research", "approval", "research", "approval", "publish"]);
+    expect(incomplete.body).toEqual({ ok: false, code: "script_incomplete", stepKey: "approval" });
+    expect(await counts()).toEqual(before);
   });
 
   it("refuses to resume a run that is not waiting", async () => {

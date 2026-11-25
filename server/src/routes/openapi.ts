@@ -4,7 +4,7 @@ import { MUSE_ASSET_VERSION, museStopBoundarySchema, museDetectorCleanupAttestat
 import { slackTestMessageSchema, slackTestMessageResultSchema, slackManagerAuthorizationSchema, slackSetupOptionsSchema, slackManagedProvisionSchema, slackManagedResultSchema, slackRegistrationSchema, slackSetupActionSchema, slackInstallAuthorizationSchema, slackRegistrationStateSchema, slackAppConfigurationSchema, slackAvatarStateSchema, slackAccountStateSchema } from "@paperclipai/shared";
 import { experimentalApiMetadata } from "./experimental-api-metadata.js";
 import { LINK_PREVIEW_BATCH_LIMIT, ATTENTION_SOURCE_KINDS } from "@paperclipai/shared";
-import { agentCaseHandoffSchema, caseWorkflowDocumentTextSchema, doneCaseHandoffSchema, createWorkflowSchema, updateWorkflowSchema, listWorkflowsSchema, readWorkflowQuerySchema, publishWorkflowVersionSchema, listWorkflowVersionsSchema, readWorkflowVersionQuerySchema, putDefaultExecutionPolicySchema, reassignIssueExecutionStageSchema, setRoutineWorkflowTargetSchema, startWorkflowRunSchema, completeWorkflowStepSchema, listWorkflowRunsSchema, cancelWorkflowRunSchema, submitWorkflowFormSchema } from "@paperclipai/shared";
+import { agentCaseHandoffSchema, caseWorkflowDocumentTextSchema, doneCaseHandoffSchema, createWorkflowSchema, updateWorkflowSchema, listWorkflowsSchema, readWorkflowQuerySchema, publishWorkflowVersionSchema, listWorkflowVersionsSchema, readWorkflowVersionQuerySchema, putDefaultExecutionPolicySchema, reassignIssueExecutionStageSchema, setRoutineWorkflowTargetSchema, startWorkflowRunSchema, completeWorkflowStepSchema, listWorkflowRunsSchema, cancelWorkflowRunSchema, submitWorkflowFormSchema, simulateWorkflowSchema } from "@paperclipai/shared";
 import {
   experimentalApiDocs,
   experimentalApiPaths,
@@ -14141,6 +14141,12 @@ for (const [method, path, summary, status] of [
 ] as const) registry.registerPath({ method, path, tags: ["Routines"], summary, description: ROUTINE_WORKFLOW_TARGET_DESCRIPTION,
   request: { params: z.object({ id: z.string().uuid() }), ...(method === "put" ? { body: jsonBody(setRoutineWorkflowTargetSchema) } : {}) },
   responses: { [status]: r.ok(), 400: r.badRequest, 401: r.unauthorized, 403: r.forbidden, 404: r.notFound, 409: r.conflict } });
+
+registry.registerPath({ method: "post", path: "/api/workflows/{id}/simulate", tags: ["Cases"],
+  summary: "Simulate a workflow with scripted outcomes, without creating any work",
+  description: "Requires enableCases and enableWorkflowVersions. Simulates the spec in the body, or a published version (versionNumber, otherwise the latest), with the outcomes each step returns on its successive visits (the last one repeats). Uses the same rules as a real run and never creates tasks, decisions, cases or runs. Returns the path and whether the run completes or escalates.",
+  request: { params: z.object({ id: z.string().uuid() }), body: jsonBody(simulateWorkflowSchema) },
+  responses: { 200: r.ok(), 400: r.badRequest, 401: r.unauthorized, 403: r.forbidden, 404: r.notFound, 422: r.unprocessable } });
 
 const WORKFLOW_RUNS_DESCRIPTION = "Requires enableCases and enableWorkflowVersions. A run executes a published workflow version on a case's primary task and stays on that version. A case holds at most one active run (409 otherwise). Each step hands the case to its owner; the owner finishes it with the complete route and one declared outcome, after saving the step's output documents on the task (422 missing_outputs otherwise). A free handoff on a case with an active run is refused. Returning to an earlier step is a new attempt; when review rounds or attempts are used up the run waits for a person (waiting_human). In this phase only agent steps run (422 workflow_not_executable otherwise). An unknown run state version returns 409 workflow_run_state_unsupported.";
 for (const [method, path, summary, status] of [
