@@ -11,11 +11,11 @@ Levantamento no `master` (`1a57a2abec`) para a spec 002. Os itens marcados "Spik
 
 ## R2. Gate de aprovação como decisão
 
-- **Decisão**: `decisionService.create` com uma opção por outcome, `continuationPolicy = wake_origin_agent`, origem = agente e run que concluíram a etapa anterior.
+- **Decisão**: `decisionService.create` com uma opção por outcome, `continuationPolicy = none`, origem = o último agente que segurou o case e a run mais recente dele nesse case. O avanço, e não a continuação da decisão, acorda o agente da etapa seguinte pelo handoff, como pede FR-010.
 - **Fatos do código**: a decisão exige `agentId` e `runId`; `expiresAt` é obrigatório, padrão 7 dias e máximo 30 dias (`expiresAt must be within 30 days`); expiradas acordam o agente de origem; as opções aceitam até 10 `effects` e a decisão até 4 `inputs`.
 - **Consequências**:
   - "Não expira por padrão" vira: TTL de 30 dias e, ao expirar sem `timeoutSec`, o avanço **reabre** o gate com uma decisão nova (nunca aprova nem rejeita sozinho). Com `timeoutSec` declarado (máximo 30 dias, validado na publicação), a expiração escala o run a `waiting_human`.
-  - Todo `approval_gate` precisa de uma etapa de agente imediatamente antes em todos os caminhos (origem da decisão). Isso entra como regra de validação do grafo e é o spike S2.
+  - Todo caminho até um `approval_gate` passa por ao menos uma etapa de agente (o último agente que segurou o case é a origem da decisão), o que mantém válido o exemplo pesquisa, redação, revisão humana, aprovação, publicação. Isso entra como regra de validação do grafo e é o spike S2.
 - **Alternativas**: `request_confirmation` na tarefa (só aceitar ou rejeitar, não casa com N outcomes); estágio de aprovação da execution policy (só protege a conclusão da tarefa).
 
 ## R3. Comentário obrigatório só ao devolver

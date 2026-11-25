@@ -295,6 +295,8 @@ Quem escreve um workflow pode simular um run com agentes e pessoas simulados, pa
 - O papel declarado numa etapa usa o modelo de papéis e permissões já existente da empresa; "gestão" segue o mesmo modelo.
 - Documentos de saída e entrada são documentos do case já existentes, identificados por chave.
 - A fila de decisões, a expiração de decisões e o acordar do agente de origem existentes são reaproveitados.
+- Todo caminho até um gate de aprovação passa por ao menos uma etapa de agente; o último agente que segurou o case é a origem técnica da decisão.
+- A plataforma limita uma decisão a 30 dias: um gate sem limite de tempo declarado é reaberto com uma decisão nova a cada 30 dias, sem aprovar nem rejeitar, e o limite de tempo declarado de um gate ou formulário é de no máximo 30 dias.
 - Tempos de lembrete e de espera usam o mecanismo existente de expiração e de trabalho por evento; nenhum polling periódico novo é criado.
 - A etapa de formulário reaproveita a pergunta estruturada ao humano que já existe no thread da tarefa; os tipos de pergunta ficam restritos aos cinco listados e as respostas viram um único documento do case.
 - A definição de etapa da spec 001 só aceitava os tipos agente, humana e gate; nesta spec o tipo formulário é acrescentado de forma aditiva.

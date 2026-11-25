@@ -9,7 +9,7 @@
 Um módulo novo, `workflow-runs`, dono da sequência do run. Ele não executa agentes: **valida e registra** o que os primitivos existentes fazem e cria os pontos de espera humana. Arquitetura híbrida, igual à recomendação do plano geral (grafo imposto pelo servidor, agente escolhe entre os outcomes permitidos):
 
 - **Etapa de agente**: o agente conclui com uma ferramenta nova, `complete_workflow_step(outcome)`. O servidor confere as saídas, valida o outcome e passa o case ao dono da próxima etapa chamando o `caseHandoffService` existente em nome do agente que concluiu (mesma autoridade, idempotência, lease e retry do handoff atual).
-- **Gate de aprovação**: uma `decision` na fila existente, com uma opção por outcome, criada em nome do agente que acabou de concluir. A resolução dispara o avanço.
+- **Gate de aprovação**: uma `decision` na fila existente, com uma opção por outcome, criada em nome de o último agente que segurou o case (origem técnica exigida pela decisão), com `continuationPolicy = none`. A resolução dispara o avanço, e o handoff para a etapa seguinte acorda o agente dela.
 - **Formulário**: uma interação `ask_user_questions` na tarefa do case; as respostas viram um documento do case.
 - **Etapa humana**: a tarefa do case é reatribuída a uma pessoa pelo servidor, como a execution policy já faz nos estágios.
 - **Avanço**: uma transação idempotente por evento (conclusão, decisão, resposta, orçamento), mais um passe de recuperação registrado na inicialização, no padrão `register*Work` dos módulos de decisão. Nenhum polling novo.
@@ -146,7 +146,7 @@ Cada spike é a primeira tarefa do PR indicado e registra o resultado em `resear
 | Spike | Pergunta | Se a resposta for ruim |
 | --- | --- | --- |
 | **S1** (2b) | O servidor pode reatribuir a tarefa do case a um usuário (etapa humana) sem passar pelo handoff, que só aceita destino de agente? | Estender o destino do handoff para usuário (mudança no módulo dono) ou limitar a fase a `human_task` entregue por decisão |
-| **S2** (2b) | Uma decisão exige agente e run de origem. Um gate logo depois de um agente tem os dois; um gate depois de etapa humana ou no início não | Validar na publicação que todo `approval_gate` é precedido por etapa de agente em todos os caminhos, e tratar o resto na 2c |
+| **S2** (2b) | Uma decisão exige agente e run de origem. Um gate logo depois de um agente tem os dois; um gate depois de etapa humana ou no início não | Regra padrão: todo caminho até o gate passa por ao menos uma etapa de agente, e a origem é o último agente que segurou o case; se a decisão não aceitar uma run já encerrada como origem, restringir a etapa de agente imediatamente antes e tratar o resto na 2c |
 | **S3** (2b) | O `inputs` de uma decisão não diferencia obrigatoriedade por opção, e a spec exige comentário só ao devolver | `requiredInputIds` por opção (aditivo) |
 | **S4** (2b) | Como `decision-expiry-work` e os módulos `*-work` registram prazos e retomadas sem polling | Seguir o mesmo padrão para timeouts, lembretes e recuperação |
 | **S5** (2b) | Onde o orçamento publica a pausa de um escopo para o run reagir | Chamada curta em `budgets.ts` |

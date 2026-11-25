@@ -22,7 +22,7 @@ Estende `workflow-spec.ts` da spec 001 de forma aditiva; versões `specVersion: 
 | Código | Quando |
 | --- | --- |
 | `external_effect_without_gate` | Etapa com `externalEffect` sem gate antecessor em todos os caminhos |
-| `gate_without_agent_origin` | `approval_gate` sem etapa de agente imediatamente antes em algum caminho |
+| `gate_without_agent_origin` | `approval_gate` alcançável por algum caminho que não passa por nenhuma etapa de agente |
 | `timeout_out_of_range` | `timeoutSec` fora de 60 a 2.592.000 |
 | `form_without_questions` | `input_form` sem perguntas |
 | `output_key_conflict` | Duas etapas declaram a mesma chave de saída sem ser uma devolução da mesma etapa |
