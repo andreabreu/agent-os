@@ -20,6 +20,7 @@ const apiPrefixes: Record<string, string> = {
   "workflow-versions.ts": "/api",
   "default-execution-policy.ts": "/api",
   "issue-stage-reassign.ts": "/api",
+  "routine-workflow-target.ts": "/api",
   "smoke-lab.ts": "/api",
   "access.ts": "/api",
   "activity.ts": "/api",

@@ -82,6 +82,7 @@ import { secretService } from "./secrets.js";
 import { getSecretProvider } from "../secrets/provider-registry.js";
 import { parseCron, validateCron } from "./cron.js";
 import { heartbeatService } from "./heartbeat.js";
+import { resolveWorkflowForDispatch } from "./workflow-routine-targets.js";
 import { finalizeRoutineRun, routineExecutionStatusService, syncRoutineRunStatusForIssue } from "./routine-run-status.js";
 import {
   instanceSettingsService,
@@ -1836,10 +1837,13 @@ export function routineService(
     const allVariables = { ...getBuiltinRoutineVariableValues(), ...automaticVariables, ...resolvedVariables };
     const title = interpolateRoutineTemplate(input.routine.title, allVariables) ?? input.routine.title;
     const baseDescription = interpolateRoutineTemplate(input.routine.description, allVariables);
-    const description = [baseDescription, input.descriptionAppendix]
+    const workflowDispatch = await resolveWorkflowForDispatch(db, input.routine);
+    const workflowAppendix = workflowDispatch.status === "ready" ? workflowDispatch.descriptionAppendix : null;
+    const description = [baseDescription, input.descriptionAppendix, workflowAppendix]
       .filter((part): part is string => Boolean(part && part.trim()))
       .join("\n\n");
-    const triggerPayload = mergeRoutineRunPayload(input.payload, { ...automaticVariables, ...resolvedVariables });
+    const mergedPayload = mergeRoutineRunPayload(input.payload, { ...automaticVariables, ...resolvedVariables });
+    const triggerPayload = workflowDispatch.status === "ready" ? { ...mergedPayload, ...workflowDispatch.payload } : mergedPayload;
     const managedRoutineBinding = await getManagedRoutineBinding(input.routine);
     const managedIssueTemplate = readManagedRoutineIssueTemplate(managedRoutineBinding?.defaultsJson);
     const issueOriginKind = managedIssueTemplate?.surfaceVisibility === "plugin_operation" && managedRoutineBinding
@@ -1986,6 +1990,7 @@ export function routineService(
 
       let createdIssue: Awaited<ReturnType<typeof issueSvc.create>> | null = null;
       try {
+        if (workflowDispatch.status === "error") throw unprocessable(workflowDispatch.message);
         const activeIssue = await findLiveExecutionIssue(input.routine, txDb, dispatchFingerprint, {
           kind: issueOriginKind,
           id: issueOriginId,

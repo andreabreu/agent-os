@@ -155,15 +155,15 @@ Monorepo pnpm: `packages/db`, `packages/shared`, `server`. A UI não muda nesta 
 
 ### Tests for User Story 5
 
-- [ ] T040 [P] [US5] Criar `server/src/__tests__/routine-workflow-target.integration.test.ts` com banco real cobrindo: definir, ler e remover o alvo; alvo de outra empresa `404`; definir alvo arquivado recusado; disparo manual e de webhook cria uma tarefa com referência ao workflow e à versão e grava `workflowVersionId` e `workflowVersion` em `routine_runs.trigger_payload`; entrega de webhook repetida cria uma única tarefa; workflow sem versão publicada deixa o run falho com `failure_reason` e sem tarefa; workflow arquivado idem; rotina sem alvo mantém o comportamento atual; gatilho `heartbeat` não é afetado; flag desligada recusa as rotas
+- [X] T040 [P] [US5] Criar `server/src/__tests__/routine-workflow-target.integration.test.ts` com banco real cobrindo: definir, ler e remover o alvo; alvo de outra empresa `404`; definir alvo arquivado recusado; disparo manual e de webhook cria uma tarefa com referência ao workflow e à versão e grava `workflowVersionId` e `workflowVersion` em `routine_runs.trigger_payload`; entrega de webhook repetida cria uma única tarefa; workflow sem versão publicada deixa o run falho com `failure_reason` e sem tarefa; workflow arquivado idem; rotina sem alvo mantém o comportamento atual; gatilho `heartbeat` não é afetado; flag desligada recusa as rotas
 
 ### Implementation for User Story 5
 
-- [ ] T041 [US5] Criar `server/src/services/workflow-routine-targets.ts` com `setTarget`, `getTarget`, `removeTarget` (company-scoped, `requireWorkflowVersionsEnabled`, activity `routine.workflow_target_set` e `routine.workflow_target_removed`) e `resolveWorkflowForDispatch(db, routine)` que devolve `null` sem alvo ou `{ workflowId, versionId, version, name }` e lança erro tipado quando não há versão publicada ou o workflow está arquivado
-- [ ] T042 [US5] Criar `server/src/routes/routine-workflow-target.ts` com `PUT`, `GET` e `DELETE /api/routines/:id/workflow-target` conforme `contracts/routine-workflow-target.md` e montar em `server/src/app.ts`
-- [ ] T043 [US5] Em `server/src/services/routines.ts`, dentro de `dispatchRoutineRun` e antes da criação da tarefa (perto da linha 2015), chamar `resolveWorkflowForDispatch`; com resultado, acrescentar a referência ao workflow e à versão na `description`, mesclar `workflowVersionId` e `workflowVersion` em `trigger_payload` e registrar a versão no activity log; em erro, marcar o run como falho pelo mecanismo existente de `failure_reason` sem criar tarefa; confirmar primeiro o ponto exato de falha no código (item R5 de `research.md`)
-- [ ] T044 [P] [US5] Documentar as rotas em `server/src/routes/openapi.ts`
-- [ ] T045 [US5] Rodar T040 e os testes existentes de rotinas (`server/src/__tests__/routines*.test.ts`) para confirmar que o comportamento sem alvo não muda
+- [X] T041 [US5] Criar `server/src/services/workflow-routine-targets.ts` com `setTarget`, `getTarget`, `removeTarget` (company-scoped, `requireWorkflowVersionsEnabled`, activity `routine.workflow_target_set` e `routine.workflow_target_removed`) e `resolveWorkflowForDispatch(db, routine)` que devolve `null` sem alvo ou `{ workflowId, versionId, version, name }` e lança erro tipado quando não há versão publicada ou o workflow está arquivado
+- [X] T042 [US5] Criar `server/src/routes/routine-workflow-target.ts` com `PUT`, `GET` e `DELETE /api/routines/:id/workflow-target` conforme `contracts/routine-workflow-target.md` e montar em `server/src/app.ts`
+- [X] T043 [US5] Em `server/src/services/routines.ts`, dentro de `dispatchRoutineRun` e antes da criação da tarefa (perto da linha 2015), chamar `resolveWorkflowForDispatch`; com resultado, acrescentar a referência ao workflow e à versão na `description`, mesclar `workflowVersionId` e `workflowVersion` em `trigger_payload` e registrar a versão no activity log; em erro, marcar o run como falho pelo mecanismo existente de `failure_reason` sem criar tarefa; confirmar primeiro o ponto exato de falha no código (item R5 de `research.md`)
+- [X] T044 [P] [US5] Documentar as rotas em `server/src/routes/openapi.ts`
+- [X] T045 [US5] Rodar T040 e os testes existentes de rotinas (`server/src/__tests__/routines*.test.ts`) para confirmar que o comportamento sem alvo não muda
 
 **Checkpoint**: todas as histórias funcionais
 

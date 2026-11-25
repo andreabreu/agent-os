@@ -21,6 +21,9 @@ export const publishWorkflowVersionSchema = z.object({
 }).strict();
 export const listWorkflowVersionsSchema = listWorkflowsSchema;
 export const readWorkflowVersionQuerySchema = readWorkflowQuerySchema;
+export const setRoutineWorkflowTargetSchema = z.object({
+  workflowId: z.string().guid(),
+}).strict();
 export const workflowVersionParamsSchema = z.object({
   id: z.string().guid(),
   version: z.coerce.number().int().positive(),

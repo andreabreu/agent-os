@@ -4,7 +4,7 @@ import { MUSE_ASSET_VERSION, museStopBoundarySchema, museDetectorCleanupAttestat
 import { slackTestMessageSchema, slackTestMessageResultSchema, slackManagerAuthorizationSchema, slackSetupOptionsSchema, slackManagedProvisionSchema, slackManagedResultSchema, slackRegistrationSchema, slackSetupActionSchema, slackInstallAuthorizationSchema, slackRegistrationStateSchema, slackAppConfigurationSchema, slackAvatarStateSchema, slackAccountStateSchema } from "@paperclipai/shared";
 import { experimentalApiMetadata } from "./experimental-api-metadata.js";
 import { LINK_PREVIEW_BATCH_LIMIT, ATTENTION_SOURCE_KINDS } from "@paperclipai/shared";
-import { agentCaseHandoffSchema, caseWorkflowDocumentTextSchema, doneCaseHandoffSchema, createWorkflowSchema, updateWorkflowSchema, listWorkflowsSchema, readWorkflowQuerySchema, publishWorkflowVersionSchema, listWorkflowVersionsSchema, readWorkflowVersionQuerySchema, putDefaultExecutionPolicySchema, reassignIssueExecutionStageSchema } from "@paperclipai/shared";
+import { agentCaseHandoffSchema, caseWorkflowDocumentTextSchema, doneCaseHandoffSchema, createWorkflowSchema, updateWorkflowSchema, listWorkflowsSchema, readWorkflowQuerySchema, publishWorkflowVersionSchema, listWorkflowVersionsSchema, readWorkflowVersionQuerySchema, putDefaultExecutionPolicySchema, reassignIssueExecutionStageSchema, setRoutineWorkflowTargetSchema } from "@paperclipai/shared";
 import {
   experimentalApiDocs,
   experimentalApiPaths,
@@ -14132,6 +14132,15 @@ registry.registerPath({ method: "post", path: "/api/issues/{id}/execution-policy
   description: "Requires enableCases and enableWorkflowVersions. Only the stage's active participant or a board user may reassign. The target must already be configured on the pending stage and cannot be the executor under review. A comment is required. Reassigning to the active participant is a no-op. Refused with 409 code execution_stage_participant_running while a run is executing the task. The round counter and decision history are kept; an agent target is woken.",
   request: { params: z.object({ id: z.string().uuid() }), body: jsonBody(reassignIssueExecutionStageSchema) },
   responses: { 200: r.ok(), 400: r.badRequest, 401: r.unauthorized, 403: r.forbidden, 404: r.notFound, 409: r.conflict, 422: r.unprocessable } });
+
+const ROUTINE_WORKFLOW_TARGET_DESCRIPTION = "Requires enableCases and enableWorkflowVersions. A routine with a workflow target starts that workflow on every schedule, webhook, API or manual run: the created task names the workflow and its latest published version, and the routine run's triggerPayload records workflowId, workflowVersionId and workflowVersion. A run fails with a clear reason, creating no task, when the workflow is archived or has no published version. Heartbeat triggers never start work and are unaffected. Board users, or the agent that runs the routine, may change the target; routine revisions do not capture it.";
+for (const [method, path, summary, status] of [
+  ["get", "/api/routines/{id}/workflow-target", "Read the workflow a routine starts", 200],
+  ["put", "/api/routines/{id}/workflow-target", "Make a routine start a published workflow", 200],
+  ["delete", "/api/routines/{id}/workflow-target", "Stop a routine from starting a workflow", 204],
+] as const) registry.registerPath({ method, path, tags: ["Routines"], summary, description: ROUTINE_WORKFLOW_TARGET_DESCRIPTION,
+  request: { params: z.object({ id: z.string().uuid() }), ...(method === "put" ? { body: jsonBody(setRoutineWorkflowTargetSchema) } : {}) },
+  responses: { [status]: r.ok(), 400: r.badRequest, 401: r.unauthorized, 403: r.forbidden, 404: r.notFound, 409: r.conflict } });
 
 for (const [method, path, body] of experimentalApiPaths) {
   const query = experimentalApiQueries[`${method.toUpperCase()} ${path}`];

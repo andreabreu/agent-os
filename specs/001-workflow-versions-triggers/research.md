@@ -33,7 +33,7 @@ Levantamento feito no `master` (`1a57a2abec`) e nas PRs upstream #15267 e #15265
 - **Decisão**: dentro de `dispatchRoutineRun` (`services/routines.ts`, antes de criar a tarefa, em torno da linha 2015), uma chamada a `resolveWorkflowForDispatch(db, routine)`. Sem alvo, retorna `null` e nada muda. Com alvo, devolve `{workflowId, versionId, version, name}`.
 - O disparo acrescenta uma referência ao workflow e à versão na descrição da tarefa, grava `workflowVersionId` e `workflowVersion` em `routine_runs.trigger_payload` e registra o activity log. Falha (sem versão publicada, workflow arquivado) usa o mecanismo existente de falha do run (`failure_reason`), sem criar tarefa.
 - **Racional**: reaproveita idempotência por entrega, `coalesce_if_active`, receipts de webhook e assinatura já existentes; nenhum gatilho novo (FR-015 e FR-016).
-- **A confirmar**: o caminho exato de marcar o run como falho antes da criação da tarefa em `dispatchRoutineRun`.
+- **Confirmado na implementação (T043)**: `dispatchRoutineRun` já marca o run como `failed` com `failureReason` para qualquer erro lançado dentro do `try` interno, depois de criar o run, e apaga uma tarefa parcial. O ponto de extensão resolve o alvo antes de montar a descrição (sem lançar), acrescenta a referência à descrição e ao `triggerPayload` e, dentro do `try`, lança o erro de "sem versão publicada" ou "arquivado" para cair nesse caminho. Rotinas sem alvo, e todas com a flag desligada, mantêm descrição e `triggerPayload` idênticos.
 
 ## R5b. Quais tipos de disparo valem
 
