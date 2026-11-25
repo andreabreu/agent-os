@@ -1254,6 +1254,86 @@ describe("issue execution policy transitions", () => {
       expect(result.patch.assigneeAgentId).toBeUndefined();
     });
 
+    function approveFirstStage(policy: IssueExecutionPolicy) {
+      return applyIssueExecutionPolicyTransition({
+        issue: {
+          status: "in_review",
+          assigneeAgentId: qaAgentId,
+          assigneeUserId: null,
+          executionPolicy: policy,
+          executionState: {
+            status: "pending",
+            currentStageId: policy.stages[0].id,
+            currentStageIndex: 0,
+            currentStageType: "review",
+            currentParticipant: { type: "agent", agentId: qaAgentId },
+            returnAssignee: { type: "agent", agentId: coderAgentId },
+            completedStageIds: [],
+            lastDecisionId: null,
+            lastDecisionOutcome: null,
+          },
+        },
+        policy,
+        requestedStatus: "done",
+        requestedAssigneePatch: {},
+        actor: { agentId: qaAgentId },
+        commentBody: "QA approved",
+      });
+    }
+
+    it("skips a later self-review-only review stage when a stage is approved and advances to approval", () => {
+      const policy = makePolicy([
+        { type: "review", participants: [{ type: "agent", agentId: qaAgentId }] },
+        { type: "review", participants: [{ type: "agent", agentId: coderAgentId }] },
+        { type: "approval", participants: [{ type: "user", userId: ctoUserId }] },
+      ]);
+
+      const result = approveFirstStage(policy);
+
+      expect(result.decision).toMatchObject({ stageId: policy.stages[0].id, outcome: "approved" });
+      expect(result.patch).toMatchObject({
+        status: "in_review",
+        assigneeAgentId: null,
+        assigneeUserId: ctoUserId,
+        executionState: {
+          status: "pending",
+          currentStageId: policy.stages[2].id,
+          currentStageType: "approval",
+          currentParticipant: { type: "user", userId: ctoUserId },
+          returnAssignee: { type: "agent", agentId: coderAgentId },
+          completedStageIds: [policy.stages[0].id, policy.stages[1].id],
+        },
+      });
+    });
+
+    it("completes the workflow when every stage after an approval is self-review-only", () => {
+      const policy = makePolicy([
+        { type: "review", participants: [{ type: "agent", agentId: qaAgentId }] },
+        { type: "review", participants: [{ type: "agent", agentId: coderAgentId }] },
+      ]);
+
+      const result = approveFirstStage(policy);
+
+      expect(result.decision).toMatchObject({ stageId: policy.stages[0].id, outcome: "approved" });
+      expect(result.patch.executionState).toMatchObject({
+        status: "completed",
+        currentStageType: null,
+        currentParticipant: null,
+        returnAssignee: { type: "agent", agentId: coderAgentId },
+        completedStageIds: [policy.stages[0].id, policy.stages[1].id],
+      });
+      expect(result.patch.assigneeAgentId).toBeUndefined();
+    });
+
+    it("still refuses to advance to an approval stage that only the author could fill", () => {
+      const policy = makePolicy([
+        { type: "review", participants: [{ type: "agent", agentId: qaAgentId }] },
+        { type: "approval", participants: [{ type: "agent", agentId: coderAgentId }] },
+      ]);
+
+      expect(() => approveFirstStage(policy)).toThrow(/No eligible approval participant/);
+    });
+
     it("skips a self-review-only review stage and advances to approval", () => {
       const policy = makePolicy([
         {
