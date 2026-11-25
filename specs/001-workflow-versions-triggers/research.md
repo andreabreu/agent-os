@@ -60,8 +60,8 @@ Verificação por leitura do código do fork (`server/src/services/issue-executi
 | Upstream | Problema | Evidência no fork | Prioridade sugerida |
 | --- | --- | --- | --- |
 | #21546, #19237, #4912 | Ao aprovar um estágio, o próximo estágio cujo único participante é o autor trava com `422 No eligible … participant` | `selectStageParticipant(nextStage, { exclude: returnAssignee })` seguido de `throw` (linhas ~904 a 909), sem o laço `canAutoSkipPendingStage` que o início do fluxo usa (linha ~1087) | **Corrigido** em `fix/execution-policy-approval-skip` (commit `86ffd479b6`, trazido para esta branch): o avanço por aprovação agora pula estágios de revisão que só o autor poderia fazer, como o início do fluxo. Um estágio de **aprovação** com só o autor continua recusado; liberar a autoaprovação (#19237) é decisão de produto pendente |
-| #21575 | Entrar em `in_review` só para esperar uma pergunta humana inicia o estágio de revisão e tira a tarefa de quem espera a resposta | Não existe `hasPendingHumanInputWait` no fork | Média: afeta etapas de formulário da spec 002 |
-| #21639 | O revisor pendente é barrado pelo gate de dependências (`issue_dependencies_blocked`) e a revisão não roda | Não existe `isPendingExecutionStageParticipant` no fork | Média |
+| #21575 | Entrar em `in_review` só para esperar uma pergunta humana inicia o estágio de revisão e tira a tarefa de quem espera a resposta | Não existe `hasPendingHumanInputWait` no fork | **Corrigido** em `fix/execution-policy-human-input-wait` (commit `1523d0d93d`, trazido para esta branch): com uma interação `human_only` pendente, `in_review` é uma espera e não inicia a revisão; `done` continua iniciando |
+| #21639 | O revisor pendente é barrado pelo gate de dependências (`issue_dependencies_blocked`) e a revisão não roda | Não existe `isPendingExecutionStageParticipant` no fork | **Corrigido** em `fix/execution-stage-dependency-gate` (commit `dbc1705378`, trazido para esta branch): a admissão do wake e o claim da run isentam o participante pendente do gate de dependências. O gate de retry agendado (`evaluateScheduledRetryGate`) não foi alterado, como no upstream |
 
 ## R8. Ferramentas nativas
 
