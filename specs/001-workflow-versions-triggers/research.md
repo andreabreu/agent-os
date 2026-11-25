@@ -12,7 +12,7 @@ Levantamento feito no `master` (`1a57a2abec`) e nas PRs upstream #15267 e #15265
 ## R2. Forma do spec e validação de grafo
 
 - **Decisão**: `specVersion: 1`, `start`, e `steps[]` com `key`, `type` (`agent_task`, `human_task`, `approval_gate`), `name`, `owner`, `inputs[]`, `outcomes[]` (`key` e `to`, onde `to` é uma etapa ou `end`) e `limits` (`maxAttempts`, `maxReviewRounds`, `timeoutSec`). Tipos `router`, `parallel`, `join` e `wait` são recusados nesta fase.
-- **Validação** (função pura `validateWorkflowGraph` em `packages/shared`): chaves únicas; `start` existe; todo destino existe ou é `end`; toda etapa é alcançável do início; existe caminho até `end`; toda etapa em ciclo (componente fortemente conexo com mais de um nó, ou laço) exige `limits.maxAttempts`.
+- **Validação** (função pura `validateWorkflowGraph` em `packages/shared`): chaves únicas; `start` existe; todo destino existe ou é `end`; toda etapa é alcançável do início; toda etapa alcançável tem caminho até `end`; entradas apontam para etapas existentes (`unknown_input`); um ciclo é aceito quando alguma etapa dele declara `maxAttempts` ou `maxReviewRounds` (o grafo só das etapas sem limite não pode ter ciclo, verificado por componentes fortemente conexos). Revisado na implementação: exigir limite em toda etapa do ciclo recusaria o caso comum redação → revisão → redação com limite só na revisão.
 - **Racional**: é o mínimo da fase 1 do documento de proposta; mensagem de erro nomeia etapa e saída (FR-004). Pura e compartilhada, então servidor e futuros clientes validam igual.
 - **Alternativas**: validar só no servidor (duplica no editor futuro); biblioteca de grafos (dependência nova para 40 linhas).
 

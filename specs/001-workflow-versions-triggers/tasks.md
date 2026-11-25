@@ -86,14 +86,14 @@ Monorepo pnpm: `packages/db`, `packages/shared`, `server`. A UI não muda nesta 
 
 ### Tests for User Story 2
 
-- [ ] T019 [P] [US2] Criar `packages/shared/src/workflow-spec-graph.test.ts` (unitário puro, ao lado do validador) com um caso por código de erro de `contracts/workflow-versions.md`: `duplicate_step_key`, `start_not_found`, `unknown_destination`, `unreachable_step`, `no_path_to_end`, `unbounded_cycle`; mais aceitação de ciclo com `maxAttempts` em toda etapa do ciclo, de laço de uma etapa com limite e de etapa final que aponta para `end`
-- [ ] T020 [US2] Acrescentar em `server/src/__tests__/workflow-versions.integration.test.ts` os casos de `422`: corpo `details.issues[]` traz `{ code, stepKey, outcomeKey?, message }`, nada é gravado em `workflow_versions` e o contador `latest_version_number` não avança
+- [X] T019 [P] [US2] Criar `packages/shared/src/workflow-spec-graph.test.ts` (unitário puro, ao lado do validador) com um caso por código de erro de `contracts/workflow-versions.md`: `duplicate_step_key`, `start_not_found`, `unknown_destination`, `unreachable_step`, `no_path_to_end`, `unbounded_cycle`; mais aceitação de ciclo com `maxAttempts` em toda etapa do ciclo, de laço de uma etapa com limite e de etapa final que aponta para `end`
+- [X] T020 [US2] Acrescentar em `server/src/__tests__/workflow-versions.integration.test.ts` os casos de `422`: corpo `details.issues[]` traz `{ code, stepKey, outcomeKey?, message }`, nada é gravado em `workflow_versions` e o contador `latest_version_number` não avança
 
 ### Implementation for User Story 2
 
-- [ ] T021 [US2] Em `packages/shared/src/workflow-spec.ts`, implementar `validateWorkflowGraph(spec)` puro: chaves únicas; `start` existe; todo destino existe ou é `end`; toda etapa é alcançável do início; existe caminho até `end`; toda etapa em ciclo (componente fortemente conexo com mais de um nó ou laço) exige `limits.maxAttempts`; retornar lista de problemas `{ code, stepKey, outcomeKey?, message }`
-- [ ] T022 [US2] Em `server/src/services/workflow-versions.ts`, chamar `validateWorkflowGraph` dentro de `publish` antes de incrementar o contador e lançar `unprocessable` com `details.issues` (usar o helper de erro existente em `server/src/errors.ts`; criar apenas se não houver equivalente)
-- [ ] T023 [US2] Rodar T019 e T020; ambos devem passar
+- [X] T021 [US2] Em `packages/shared/src/workflow-spec.ts`, implementar `validateWorkflowGraph(spec)` puro: chaves únicas; `start` existe; todo destino existe ou é `end`; toda etapa é alcançável do início; existe caminho até `end`; toda etapa em ciclo (componente fortemente conexo com mais de um nó ou laço) exige `limits.maxAttempts`; retornar lista de problemas `{ code, stepKey, outcomeKey?, message }`
+- [X] T022 [US2] Em `server/src/services/workflow-versions.ts`, chamar `validateWorkflowGraph` dentro de `publish` antes de incrementar o contador e lançar `unprocessable` com `details.issues` (usar o helper de erro existente em `server/src/errors.ts`; criar apenas se não houver equivalente)
+- [X] T023 [US2] Rodar T019 e T020; ambos devem passar
 
 **Checkpoint**: US1 e US2 completas; MVP entregável (versões válidas e imutáveis)
 

@@ -182,6 +182,34 @@ describe("workflow versions", () => {
     expect(found).toContain("/api/workflows/{id}/versions");
   });
 
+  it("refuses a structurally invalid graph with the step and problem named, storing nothing", async () => {
+    await enableFlags();
+    const { workflowId } = await companyWithWorkflow();
+    const invalid = {
+      specVersion: 1,
+      start: "research",
+      steps: [
+        { key: "research", name: "Research", type: "agent_task", owner: { kind: "agent", ref: "researcher" },
+          outcomes: [{ key: "done", to: "review" }] },
+        { key: "review", name: "Review", type: "approval_gate", owner: { kind: "role", ref: "editor" },
+          outcomes: [{ key: "approved", to: "nowhere" }, { key: "changes", to: "research" }] },
+        { key: "orphan", name: "Orphan", type: "agent_task", owner: { kind: "agent", ref: "researcher" },
+          outcomes: [{ key: "done", to: "end" }] },
+      ],
+    };
+
+    const refused = await request(appFor()).post(`/api/workflows/${workflowId}/versions`).send({ spec: invalid }).expect(422);
+
+    expect(refused.body.details.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "unknown_destination", stepKey: "review", outcomeKey: "approved" }),
+      expect.objectContaining({ code: "unreachable_step", stepKey: "orphan" }),
+      expect.objectContaining({ code: "unbounded_cycle", stepKey: "research" }),
+    ]));
+    expect(await db.select().from(workflowVersions)).toHaveLength(0);
+    const [workflow] = await db.select().from(workflows).where(eq(workflows.id, workflowId));
+    expect(workflow!.latestVersionNumber).toBe(0);
+  });
+
   it("rejects a malformed spec before storing anything", async () => {
     await enableFlags();
     const { workflowId } = await companyWithWorkflow();

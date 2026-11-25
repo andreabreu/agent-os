@@ -18,7 +18,7 @@ Todas as rotas exigem `enableCases` e `enableWorkflowVersions` (senão `403` com
 | `400` | Spec malformado (schema); nada é gravado |
 | `422` | Spec inválido; `details.issues[]` traz `{ code, stepKey, outcomeKey?, message }` |
 
-Códigos de validação de grafo: `duplicate_step_key`, `start_not_found`, `unknown_destination`, `unreachable_step`, `no_path_to_end`, `unbounded_cycle`, `unsupported_step_type`.
+Códigos de validação de grafo (`422`, `details.code = "invalid_workflow_graph"`): `duplicate_step_key`, `start_not_found`, `unknown_destination`, `unknown_input`, `unreachable_step`, `no_path_to_end` (por etapa alcançável que não chega ao fim), `unbounded_cycle`. Um ciclo é aceito quando alguma etapa dele declara `maxAttempts` ou `maxReviewRounds`. `unsupported_step_type` vem do schema (`400`).
 
 ## Ferramentas nativas (somente leitura)
 

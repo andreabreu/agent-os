@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { workflowVersions, workflows, type Db } from "@paperclipai/db";
-import type { WorkflowSpec } from "@paperclipai/shared";
-import { conflict, forbidden, notFound } from "../errors.js";
+import { validateWorkflowGraph, workflowSpecSchema, type WorkflowSpec } from "@paperclipai/shared";
+import { conflict, forbidden, notFound, unprocessable } from "../errors.js";
 import { casesDisabledError } from "./cases-disabled.js";
 import { instanceSettingsService } from "./instance-settings.js";
 import { authorizeCaseCreation } from "./case-mutation-authorization.js";
@@ -73,18 +73,21 @@ export function workflowVersionService(db: Db) {
   }
 
   return {
-    async publish(companyId: string, workflowId: string, actor: AuthorizationActor, input: { spec: WorkflowSpec }) {
+    async publish(companyId: string, workflowId: string, actor: AuthorizationActor, input: { spec: unknown }) {
+      const spec: WorkflowSpec = workflowSpecSchema.parse(input.spec);
       return mutate(async (tx, publications) => {
         await requireWorkflowVersionsEnabled(tx);
         await authorizeCaseCreation(tx, actor, { companyId });
         const workflow = await lockWorkflow(tx, companyId, workflowId);
         if (workflow.status === "archived") throw conflict("Workflow is archived; it cannot receive new versions");
+        const issues = validateWorkflowGraph(spec);
+        if (issues.length > 0) throw unprocessable("Workflow spec is not a valid graph", { code: "invalid_workflow_graph", issues });
         const [numbered] = await tx.update(workflows)
           .set({ latestVersionNumber: sql`${workflows.latestVersionNumber} + 1`, updatedAt: new Date() })
           .where(eq(workflows.id, workflowId)).returning({ version: workflows.latestVersionNumber });
-        const specHash = workflowSpecHash(input.spec);
+        const specHash = workflowSpecHash(spec);
         const [version] = await tx.insert(workflowVersions).values({
-          companyId, workflowId, version: numbered!.version, spec: input.spec, specHash,
+          companyId, workflowId, version: numbered!.version, spec, specHash,
           publishedByAgentId: actor.type === "agent" ? actor.agentId : null,
           publishedByUserId: actor.type === "board" ? actor.userId ?? null : null,
         }).returning(versionMetadata);
