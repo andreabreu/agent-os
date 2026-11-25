@@ -5,6 +5,7 @@ import type {
   WorkspaceRuntimeService,
 } from "./workspace-runtime.js";
 import type { AgentEnvConfig } from "./secrets.js";
+import type { IssueExecutionPolicy } from "./issue.js";
 
 export interface ProjectGitAuthorization {
   grantId: string | null;
@@ -158,6 +159,8 @@ export interface Project {
   pauseReason: PauseReason | null;
   pausedAt: Date | null;
   executionWorkspacePolicy: ProjectExecutionWorkspacePolicy | null;
+  /** Execution policy given to new tasks in this project that declare none; overrides the company's. */
+  defaultExecutionPolicy?: IssueExecutionPolicy | null;
   workspaceProvider?: ProjectWorkspaceProviderConfiguration;
   codebase: ProjectCodebase;
   workspaces: ProjectWorkspace[];

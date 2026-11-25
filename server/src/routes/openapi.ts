@@ -4,7 +4,7 @@ import { MUSE_ASSET_VERSION, museStopBoundarySchema, museDetectorCleanupAttestat
 import { slackTestMessageSchema, slackTestMessageResultSchema, slackManagerAuthorizationSchema, slackSetupOptionsSchema, slackManagedProvisionSchema, slackManagedResultSchema, slackRegistrationSchema, slackSetupActionSchema, slackInstallAuthorizationSchema, slackRegistrationStateSchema, slackAppConfigurationSchema, slackAvatarStateSchema, slackAccountStateSchema } from "@paperclipai/shared";
 import { experimentalApiMetadata } from "./experimental-api-metadata.js";
 import { LINK_PREVIEW_BATCH_LIMIT, ATTENTION_SOURCE_KINDS } from "@paperclipai/shared";
-import { agentCaseHandoffSchema, caseWorkflowDocumentTextSchema, doneCaseHandoffSchema, createWorkflowSchema, updateWorkflowSchema, listWorkflowsSchema, readWorkflowQuerySchema, publishWorkflowVersionSchema, listWorkflowVersionsSchema, readWorkflowVersionQuerySchema } from "@paperclipai/shared";
+import { agentCaseHandoffSchema, caseWorkflowDocumentTextSchema, doneCaseHandoffSchema, createWorkflowSchema, updateWorkflowSchema, listWorkflowsSchema, readWorkflowQuerySchema, publishWorkflowVersionSchema, listWorkflowVersionsSchema, readWorkflowVersionQuerySchema, putDefaultExecutionPolicySchema } from "@paperclipai/shared";
 import {
   experimentalApiDocs,
   experimentalApiPaths,
@@ -14115,6 +14115,17 @@ for (const [method, path, body, query, summary, status] of [
   request: { params: path.includes("{version}") ? z.object({ id: z.string().uuid(), version: z.number().int().positive() }) : z.object({ id: z.string().uuid() }),
     ...(body ? { body: jsonBody(body) } : {}), ...(query ? { query } : {}) },
   responses: { [status]: r.ok(), 400: r.badRequest, 401: r.unauthorized, 403: r.forbidden, 404: r.notFound, 409: r.conflict } });
+
+const DEFAULT_EXECUTION_POLICY_DESCRIPTION = "Requires enableCases and enableWorkflowVersions. A new task that declares no executionPolicy receives its project's default, otherwise its company's. A policy declared at creation, including null, always wins; routine tasks, conversations and tasks created as done never receive a default. Reads need company access (projects also need project read access); writes are board-only. Defaults cannot schedule a monitor. Send null to clear.";
+for (const [method, path, summary] of [
+  ["get", "/api/companies/{companyId}/default-execution-policy", "Read the company's default execution policy for new tasks"],
+  ["put", "/api/companies/{companyId}/default-execution-policy", "Set or clear the company's default execution policy for new tasks"],
+  ["get", "/api/projects/{id}/default-execution-policy", "Read the project's default execution policy for new tasks"],
+  ["put", "/api/projects/{id}/default-execution-policy", "Set or clear the project's default execution policy for new tasks"],
+] as const) registry.registerPath({ method, path, tags: ["Cases"], summary, description: DEFAULT_EXECUTION_POLICY_DESCRIPTION,
+  request: { params: path.includes("{companyId}") ? z.object({ companyId: z.string().uuid() }) : z.object({ id: z.string().uuid() }),
+    ...(method === "put" ? { body: jsonBody(putDefaultExecutionPolicySchema) } : {}) },
+  responses: { 200: r.ok(), 400: r.badRequest, 401: r.unauthorized, 403: r.forbidden, 404: r.notFound } });
 
 for (const [method, path, body] of experimentalApiPaths) {
   const query = experimentalApiQueries[`${method.toUpperCase()} ${path}`];

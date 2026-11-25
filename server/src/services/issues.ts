@@ -219,6 +219,7 @@ import {
   buildInitialIssueMonitorFields,
   normalizeIssueExecutionPolicy,
 } from "./issue-execution-policy.js";
+import { withDefaultIssueExecutionPolicy } from "./issue-default-execution-policy.js";
 import { assertQualityReviewPolicyMutation, assertQualityReviewPolicyReuse, assertRequiredQualityReviewComplete, requiredQualityReview } from "./required-quality-review.js";
 import { instanceSettingsService } from "./instance-settings.js";
 import { redactCurrentUserText } from "../log-redaction.js";
@@ -10906,6 +10907,7 @@ export function issueService(db: Db) {
             );
           }
         }
+        issueData.executionPolicy = await withDefaultIssueExecutionPolicy(tx as unknown as Db, companyId, issueData);
         const workspaceActor: AuthorizationActor = workspaceSelectionActor ?? (issueData.createdByUserId
           ? { type: "board", userId: issueData.createdByUserId, companyIds: [companyId] }
           : { type: "agent", agentId: issueData.createdByAgentId ?? issueData.assigneeAgentId, companyId });
