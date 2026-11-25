@@ -79,9 +79,9 @@ Quando um estágio de revisão ou aprovação está pendente, o participante ati
 
 ---
 
-### User Story 5 - Iniciar um workflow por tempo, chamada externa ou heartbeat (Priority: P3)
+### User Story 5 - Iniciar um workflow por tempo ou por chamada (Priority: P3)
 
-Uma rotina existente passa a poder ter como alvo um workflow publicado, além do que já aceita hoje. Ela dispara pelos mesmos gatilhos que já existem (agendamento, chamada externa autenticada, API e heartbeat). Nesta fase o disparo cria o trabalho inicial a partir da versão mais recente; não há run nem avanço automático entre etapas.
+Uma rotina existente passa a poder ter como alvo um workflow publicado, além do que já aceita hoje. Ela dispara pelos mesmos gatilhos de início que já existem: agendamento (expressão cron com fuso), chamada externa por URL pública com assinatura configurável e chamada autenticada à API (inclui o disparo manual). Nesta fase o disparo cria o trabalho inicial a partir da versão mais recente; não há run nem avanço automático entre etapas.
 
 **Why this priority**: Responde ao requisito de triggers sem criar um segundo motor de gatilhos. Depende das histórias 1 e 2.
 
@@ -125,7 +125,7 @@ Uma rotina existente passa a poder ter como alvo um workflow publicado, além do
 - **FR-012**: A política padrão NÃO DEVE ser aplicada a tarefas geradas por rotina nem a tarefas de conversa.
 - **FR-013**: O participante ativo de um estágio pendente ou um ator com permissão de gestão DEVE poder reatribuir o estágio a outro participante já configurado nele.
 - **FR-014**: A reatribuição DEVE ser recusada para participante fora do estágio, estágio concluído ou ator sem permissão.
-- **FR-015**: Uma rotina DEVE poder ter como alvo um workflow publicado, reutilizando os gatilhos existentes de agendamento, chamada externa, API e heartbeat, sem novo mecanismo de gatilho.
+- **FR-015**: Uma rotina DEVE poder ter como alvo um workflow publicado, reutilizando os gatilhos de início existentes (agendamento, chamada externa e API), sem novo mecanismo de gatilho. O gatilho de heartbeat não inicia trabalho e fica fora de escopo.
 - **FR-016**: O disparo de uma rotina com alvo em workflow DEVE criar o trabalho inicial uma única vez por entrega e registrar qual versão foi usada.
 - **FR-017**: O disparo DEVE falhar com motivo claro quando o workflow não tem versão publicada ou está arquivado, sem criar trabalho parcial.
 - **FR-018**: O recurso DEVE ficar atrás de uma flag experimental que depende de Cases; com a flag desligada nada novo é exposto e dados existentes permanecem.
@@ -158,6 +158,7 @@ Uma rotina existente passa a poder ter como alvo um workflow publicado, além do
 
 - A tela de edição de workflow e a visualização do grafo ficam fora desta fase; a autoria é por API e agentes, e a definição pode ser enviada em texto estruturado.
 - "Disparo cria o trabalho inicial" significa uma tarefa comum com referência à versão, não um run com avanço automático; runs, avançador, gates entre etapas, paralelismo e UI de run são das fases seguintes.
+- O gatilho `heartbeat` das rotinas é uma verificação permanente do agente, depende de outra flag experimental e não inicia trabalho; por isso não é um tipo de disparo de workflow.
 - A versão usada por um disparo é sempre a mais recente publicada no momento do disparo.
 - A reatribuição de estágio e a política padrão são portadas das propostas abertas do upstream (#15265 e #15267) e adaptadas ao fork; o resultado não será contribuído ao upstream.
 - As tabelas do experimento Pipelines removido não são reaproveitadas.
