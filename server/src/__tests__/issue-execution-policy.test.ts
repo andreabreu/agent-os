@@ -1218,6 +1218,45 @@ describe("issue execution policy transitions", () => {
       expect(result.patch.assigneeAgentId).toBe(qaAgentId);
     });
 
+    function moveCoderTask(requestedStatus: "in_review" | "done", hasPendingHumanInputWait: boolean) {
+      const policy = reviewOnlyPolicy();
+      return applyIssueExecutionPolicyTransition({
+        issue: {
+          status: "in_progress",
+          assigneeAgentId: coderAgentId,
+          assigneeUserId: null,
+          executionPolicy: policy,
+          executionState: null,
+        },
+        policy,
+        requestedStatus,
+        requestedAssigneePatch: {},
+        actor: { agentId: coderAgentId },
+        commentBody: "Waiting on the board",
+        hasPendingHumanInputWait,
+      });
+    }
+
+    it("keeps the executor on a task that enters in_review to wait for a human answer", () => {
+      const result = moveCoderTask("in_review", true);
+
+      expect(result).toEqual({ patch: {} });
+    });
+
+    it("starts the review stage on in_review when no human answer is pending", () => {
+      const result = moveCoderTask("in_review", false);
+
+      expect(result.patch.assigneeAgentId).toBe(qaAgentId);
+      expect(result.patch.executionState).toMatchObject({ status: "pending", currentStageType: "review" });
+    });
+
+    it("still starts the review stage when the executor marks the task done during a human wait", () => {
+      const result = moveCoderTask("done", true);
+
+      expect(result.patch).toMatchObject({ status: "in_review", assigneeAgentId: qaAgentId });
+      expect(result.patch.executionState).toMatchObject({ status: "pending", currentStageType: "review" });
+    });
+
     it("skips a self-review-only stage and completes the workflow", () => {
       const policy = makePolicy([
         {

@@ -57,6 +57,7 @@ const mockDbSelectWhere = vi.hoisted(() => vi.fn(() => ({
       permissions: null,
     }]).then(onFulfilled, onRejected),
 })));
+const mockHumanInputWaitRows = vi.hoisted(() => ({ rows: [] as Array<{ id: string }> }));
 const mockDbSelectFrom = vi.hoisted(() => vi.fn((_table: unknown): { where: (...args: never[]) => unknown } => ({ where: mockDbSelectWhere })));
 const mockDbSelect = vi.hoisted(() => vi.fn(() => ({ from: mockDbSelectFrom })));
 const mockDb = vi.hoisted(() => ({
@@ -224,11 +225,18 @@ describe("issue execution policy routes", () => {
     mockIssueService.listWakeableBlockedDependents.mockResolvedValue([]);
     mockIssueService.getWakeableParentAfterChildCompletion.mockResolvedValue(null);
     mockIssueThreadInteractionService.listForIssue.mockResolvedValue([]);
+    mockHumanInputWaitRows.rows = [];
     mockIssueThreadInteractionService.expireRequestConfirmationsSupersededByComment.mockResolvedValue([]);
     mockIssueApprovalService.listApprovalsForIssue.mockResolvedValue([]);
     mockDbSelect.mockImplementation(() => ({ from: mockDbSelectFrom }));
     mockDbSelectFrom.mockImplementation((table) => {
       const name = getTableName(table as Parameters<typeof getTableName>[0]);
+      if (name === "issue_thread_interactions") {
+        return { where: () => ({
+          ...(mockDbSelectWhere() as object),
+          limit: () => Promise.resolve(mockHumanInputWaitRows.rows),
+        }) };
+      }
       if (name !== "issues" && name !== "agents") return { where: mockDbSelectWhere };
       return { where: (condition: SQL) => {
         const ids = [...new Set(new PgDialect().sqlToQuery(condition).params
@@ -537,6 +545,55 @@ describe("issue execution policy routes", () => {
       expect.any(Array),
     );
     expect(mockLogActivity.mock.calls[0]?.[0]).toBe(mockIssueService.update.mock.calls[0]?.[2]);
+  });
+
+  it("keeps the executor when it enters in_review to wait for a pending human answer", async () => {
+    const policy = normalizeIssueExecutionPolicy({
+      stages: [{ type: "review", participants: [{ type: "agent", agentId: "22222222-2222-4222-8222-222222222222" }] }],
+    })!;
+    const issue = {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      companyId: "company-1",
+      status: "in_progress",
+      assigneeAgentId: "33333333-3333-4333-8333-333333333333",
+      assigneeUserId: null,
+      createdByUserId: "local-board",
+      identifier: "PAP-1010",
+      title: "Needs a human answer",
+      executionPolicy: policy,
+      executionState: null,
+    };
+    mockIssueService.getById.mockResolvedValue(issue);
+    mockIssueThreadInteractionService.listForIssue.mockResolvedValue([
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        kind: "ask_user_questions",
+        status: "pending",
+        createdByAgentId: "33333333-3333-4333-8333-333333333333",
+        sourceRunId: "55555555-5555-4555-8555-555555555555",
+      },
+    ]);
+    mockHumanInputWaitRows.rows = [{ id: "11111111-1111-4111-8111-111111111111" }];
+    mockIssueService.update.mockImplementation(async (_id: string, patch: Record<string, unknown>) => ({
+      ...issue,
+      ...patch,
+      updatedAt: new Date(),
+    }));
+
+    const res = await request(await createApp({
+      type: "agent",
+      agentId: "33333333-3333-4333-8333-333333333333",
+      companyId: "company-1",
+      runId: "55555555-5555-4555-8555-555555555555",
+    }))
+      .patch("/api/issues/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+      .send({ status: "in_review" });
+
+    expect(res.status).toBe(200);
+    const patch = mockIssueService.update.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(patch).toMatchObject({ status: "in_review" });
+    expect(patch.assigneeAgentId).not.toBe("22222222-2222-4222-8222-222222222222");
+    expect(patch.executionState ?? null).toBeNull();
   });
 
   it("binds an explicitly designated same-run confirmation to the review transition", async () => {
