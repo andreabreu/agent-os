@@ -103,7 +103,7 @@ async function gateStep(db: Db, decisionId: string) {
   return step ?? null;
 }
 
-async function reopenCount(db: Db, runId: string, stepKey: string, attempt: number) {
+export async function gateReopenCount(db: Db, runId: string, stepKey: string, attempt: number) {
   const rows = await db.select({ id: workflowRunEvents.id }).from(workflowRunEvents).where(and(
     eq(workflowRunEvents.runId, runId), eq(workflowRunEvents.kind, "gate_opened"),
     sql`${workflowRunEvents.payload} ->> 'stepKey' = ${stepKey}`,
@@ -124,13 +124,13 @@ export async function onWorkflowGateResolved(db: Db, decisionId: string, actor: 
   const step = await gateStep(db, decisionId);
   if (!decision || !gate || !step || step.status !== "awaiting_approval") return;
   const [run] = await db.select().from(workflowRuns).where(eq(workflowRuns.id, gate.runId));
-  if (!run || !isRunActive(run.status)) return;
+  if (!run || !isRunActive(run.status) || run.status === "paused") return;
   const spec = await loadRunSpec(db, run);
   const gateDefinition = findStep(spec, step.stepKey);
 
   if (decision.status === "expired" && !gate.timeoutDeclared) {
     const reopened = await openGate(db, { companyId: run.companyId, run, spec, step: gateDefinition, attempt: step.attempt,
-      originAgentId: decision.originAgentId, summary: null, reopenCount: await reopenCount(db, run.id, step.stepKey, step.attempt) });
+      originAgentId: decision.originAgentId, summary: null, reopenCount: await gateReopenCount(db, run.id, step.stepKey, step.attempt) });
     await writeWithActivity(db, async (tx) => {
       const [current] = await tx.select().from(workflowRunSteps).where(eq(workflowRunSteps.id, step.id)).for("update");
       if (!current || current.decisionId !== decisionId) return;
@@ -152,7 +152,7 @@ export async function onWorkflowGateResolved(db: Db, decisionId: string, actor: 
     await writeWithActivity(db, async (tx) => {
       const [current] = await tx.select().from(workflowRunSteps).where(eq(workflowRunSteps.id, step.id)).for("update");
       if (!current || current.decisionId !== decisionId || current.status !== "awaiting_approval") return;
-      await escalateRun(tx, { companyId: run.companyId, runId: run.id, reason, actor: SYSTEM_ACTOR });
+      await escalateRun(tx, { companyId: run.companyId, runId: run.id, reason, actor: SYSTEM_ACTOR, decisionId });
     });
     return;
   }
@@ -167,7 +167,7 @@ export async function onWorkflowGateResolved(db: Db, decisionId: string, actor: 
   if (plan.kind === "invalid_outcome") return;
   if (!actor) {
     await writeWithActivity(db, async (tx) => {
-      await escalateRun(tx, { companyId: run.companyId, runId: run.id, actor: SYSTEM_ACTOR,
+      await escalateRun(tx, { companyId: run.companyId, runId: run.id, actor: SYSTEM_ACTOR, decisionId,
         reason: `Decision "${outcome}" on "${gateDefinition.name}" needs a person to resume the run` });
     });
     return;

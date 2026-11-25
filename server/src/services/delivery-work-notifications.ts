@@ -74,6 +74,7 @@ export const DELIVERY_QUEUES = {
   joinRequestRetention: "join-request-retention",
   decisionTargets: "decision-targets",
   decisionEffectRecovery: "decision-effect-recovery",
+  workflowRunRecovery: "workflow-run-recovery",
   decisionExpiry: "decision-expiry",
   decisionContinuation: "decision-continuation",
 

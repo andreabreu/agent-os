@@ -4,7 +4,7 @@ import { MUSE_ASSET_VERSION, museStopBoundarySchema, museDetectorCleanupAttestat
 import { slackTestMessageSchema, slackTestMessageResultSchema, slackManagerAuthorizationSchema, slackSetupOptionsSchema, slackManagedProvisionSchema, slackManagedResultSchema, slackRegistrationSchema, slackSetupActionSchema, slackInstallAuthorizationSchema, slackRegistrationStateSchema, slackAppConfigurationSchema, slackAvatarStateSchema, slackAccountStateSchema } from "@paperclipai/shared";
 import { experimentalApiMetadata } from "./experimental-api-metadata.js";
 import { LINK_PREVIEW_BATCH_LIMIT, ATTENTION_SOURCE_KINDS } from "@paperclipai/shared";
-import { agentCaseHandoffSchema, caseWorkflowDocumentTextSchema, doneCaseHandoffSchema, createWorkflowSchema, updateWorkflowSchema, listWorkflowsSchema, readWorkflowQuerySchema, publishWorkflowVersionSchema, listWorkflowVersionsSchema, readWorkflowVersionQuerySchema, putDefaultExecutionPolicySchema, reassignIssueExecutionStageSchema, setRoutineWorkflowTargetSchema, startWorkflowRunSchema, completeWorkflowStepSchema, listWorkflowRunsSchema } from "@paperclipai/shared";
+import { agentCaseHandoffSchema, caseWorkflowDocumentTextSchema, doneCaseHandoffSchema, createWorkflowSchema, updateWorkflowSchema, listWorkflowsSchema, readWorkflowQuerySchema, publishWorkflowVersionSchema, listWorkflowVersionsSchema, readWorkflowVersionQuerySchema, putDefaultExecutionPolicySchema, reassignIssueExecutionStageSchema, setRoutineWorkflowTargetSchema, startWorkflowRunSchema, completeWorkflowStepSchema, listWorkflowRunsSchema, cancelWorkflowRunSchema } from "@paperclipai/shared";
 import {
   experimentalApiDocs,
   experimentalApiPaths,
@@ -14148,11 +14148,15 @@ for (const [method, path, summary, status] of [
   ["get", "/api/companies/{companyId}/workflow-runs", "List workflow runs", 200],
   ["get", "/api/workflow-runs/{id}", "Read a workflow run with its steps and recent events", 200],
   ["post", "/api/workflow-runs/{id}/steps/{stepKey}/complete", "Finish the current step of a workflow run with an outcome", 200],
+  ["post", "/api/workflow-runs/{id}/cancel", "Cancel a workflow run and its open gate decisions; the case's task stays", 200],
+  ["post", "/api/workflow-runs/{id}/resume", "Resume a workflow run that waits for a person", 200],
 ] as const) registry.registerPath({ method, path, tags: ["Cases"], summary, description: WORKFLOW_RUNS_DESCRIPTION,
   request: {
     params: path.includes("{companyId}") ? z.object({ companyId: z.string().uuid() })
       : path.includes("{stepKey}") ? z.object({ id: z.string().uuid(), stepKey: z.string() }) : z.object({ id: z.string().uuid() }),
     ...(path.endsWith("/complete") ? { body: jsonBody(completeWorkflowStepSchema) }
+      : path.endsWith("/cancel") ? { body: jsonBody(cancelWorkflowRunSchema) }
+      : path.endsWith("/resume") ? {}
       : method === "post" ? { body: jsonBody(startWorkflowRunSchema) } : {}),
     ...(method === "get" && path.includes("{companyId}") ? { query: listWorkflowRunsSchema } : {}),
   },

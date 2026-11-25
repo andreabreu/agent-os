@@ -31,6 +31,7 @@ import { approvalRetentionService, registerApprovalRetentionWork } from "./servi
 import { registerDecisionTargetWork } from "./services/decision-target-work.js";
 import { registerDecisionEffectRecoveryWork } from "./services/decision-effect-recovery-work.js";
 import { registerDecisionExpiryWork } from "./services/decision-expiry-work.js";
+import { registerWorkflowRunRecoveryWork } from "./services/workflow-run-work.js";
 import { registerDecisionContinuationWork } from "./services/decision-continuation-work.js";
 
 import { registerDecisionArchiveDeliveryWork } from "./services/decision-archive-delivery-work.js";
@@ -2036,6 +2037,8 @@ async function startServerWithDatabaseTeardown(
       await step("decision_expiry_worker", () => registerDecisionExpiryWork(deliveryWork, decisionExecutor,
         () => !isIdleTaskDrainActive() && !isWarmStandby() && !heartbeatSchedulerStopped).ready);
       await step("decision_effect_recovery_worker", () => registerDecisionEffectRecoveryWork(deliveryWork, decisionExecutor,
+        () => !isIdleTaskDrainActive() && !isWarmStandby() && !heartbeatSchedulerStopped).ready);
+      await step("workflow_run_recovery_worker", () => registerWorkflowRunRecoveryWork(deliveryWork, db as any,
         () => !isIdleTaskDrainActive() && !isWarmStandby() && !heartbeatSchedulerStopped).ready);
       await step("decision_target_worker", () => registerDecisionTargetWork(deliveryWork, decisionExecutor,
         () => !isIdleTaskDrainActive() && !isWarmStandby() && !heartbeatSchedulerStopped).ready);

@@ -235,11 +235,11 @@ export async function applyPlan(tx: Db, input: {
 }
 
 export async function escalateRun(tx: Db, input: { companyId: string; runId: string; reason: string;
-  actor: { actorType: string; actorId: string | null } }) {
+  actor: { actorType: string; actorId: string | null }; decisionId?: string }) {
   const now = new Date();
   await tx.update(workflowRuns).set({ status: "waiting_human", statusReason: input.reason, updatedAt: now })
     .where(eq(workflowRuns.id, input.runId));
   await tx.insert(workflowRunEvents).values({ runId: input.runId, companyId: input.companyId,
     eventKey: `escalated:${randomUUID()}`, kind: "escalated", ...input.actor,
-    payload: { reason: input.reason } });
+    payload: { reason: input.reason, ...(input.decisionId ? { decisionId: input.decisionId } : {}) } });
 }

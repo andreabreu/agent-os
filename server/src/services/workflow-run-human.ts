@@ -68,6 +68,30 @@ export async function assignWorkflowHumanStepAfterRelease(db: Db, runId: string)
   }
 }
 
+/** Gives waiting human steps to their person once no run holds the case's task; part of the recovery pass. */
+export async function assignReadyHumanSteps(db: Db, limit: number) {
+  const waiting = await db.select({ step: workflowRunSteps, run: workflowRuns, task: issues }).from(workflowRunSteps)
+    .innerJoin(workflowRuns, eq(workflowRuns.id, workflowRunSteps.runId))
+    .innerJoin(cases, eq(cases.id, workflowRuns.caseId))
+    .innerJoin(issues, eq(issues.id, cases.workIssueId))
+    .where(and(eq(workflowRunSteps.status, "ready"), inArray(workflowRuns.status, ["running", "waiting_human"])))
+    .limit(limit);
+  for (const { step, run, task } of waiting) {
+    if (!step.assigneeUserId || isHeldByRun(task)) continue;
+    await db.transaction(async (transaction) => {
+      const tx = transaction as unknown as Db;
+      const [current] = await tx.select().from(workflowRunSteps).where(eq(workflowRunSteps.id, step.id)).for("update");
+      const [locked] = await tx.select().from(issues).where(eq(issues.id, task.id)).for("update");
+      if (current?.status !== "ready" || !locked || isHeldByRun(locked)) return;
+      await assignToPerson(tx, locked, step.assigneeUserId!);
+      await tx.update(workflowRunSteps).set({ status: "running" }).where(eq(workflowRunSteps.id, step.id));
+      await tx.insert(workflowRunEvents).values({ runId: run.id, companyId: run.companyId, eventKey: `human_assigned:${step.id}`,
+        kind: "step_ready", ...SYSTEM_ACTOR, payload: { stepKey: step.stepKey, attempt: step.attempt, userId: step.assigneeUserId } })
+        .onConflictDoNothing();
+    });
+  }
+}
+
 /** Gives the task back to the agent that held it before a human step, so a normal handoff can move it on. */
 export async function returnTaskFromPerson(db: Db, input: { caseId: string; parkedAgentId: string | null; nextAgentId: string }) {
   const task = await caseTask(db, input.caseId);

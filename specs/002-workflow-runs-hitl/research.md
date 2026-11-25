@@ -60,6 +60,8 @@ Levantamento no `master` (`1a57a2abec`) para a spec 002. Os itens marcados "Spik
 - **Padrão**: os módulos `decision-effect-recovery-work`, `tool-review-recovery-work` e `workspace-recovery-work` registram trabalho de recuperação em `server/src/index.ts`; `decision-continuations` entrega por `sweep` limitado. O módulo novo segue esse padrão (`workflow-run-work.ts`), sem timers.
 - **Spike S4**: ler `decision-expiry-work.ts` para registrar prazos e lembretes pelo mesmo mecanismo.
 
+- **Spike S4 (resolvido):** `registerDeadlineWork` roda o trabalho uma vez no registro e de novo a cada `notifyDeliveryWork` na sua fila, sem polling. O prazo de um gate já é tratado pela expiração de decisões existente (`registerDecisionExpiryWork`); o motor reage pelo aviso. O passe de recuperação do run usa a fila nova `workflow-run-recovery` (`workflow-run-work.ts`, registrado em `server/src/index.ts`): espelha pausas de orçamento, processa decisões de gate que o run não recebeu (sem decidir por ninguém: sem ator, o run espera uma pessoa) e entrega etapas humanas à pessoa quando nenhuma run segura a tarefa.
+
 ## R7. Run por case, versão fixa e estado
 
 - **Decisão**: `workflow_runs` com índice único parcial `(case_id) WHERE status IN ('running','waiting_human','paused')`; `version_id` fixo; `state_version` inteiro; código de erro permanente `workflow_run_state_unsupported` quando o servidor encontra um `state_version` que não entende (regra `upgrade-safe-run-state`).
@@ -69,6 +71,9 @@ Levantamento no `master` (`1a57a2abec`) para a spec 002. Os itens marcados "Spik
 
 - **Decisão**: ao avançar, o servidor consulta o estado de pausa do agente e da empresa (`pauseReason = "budget"` em `agents` e `companies`); se pausado, marca o run `paused` e não cria trabalho. Uma chamada curta em `budgets.ts` avisa o módulo ao pausar e ao retomar, para o run reagir por evento.
 - **Spike S5**: localizar o ponto de publicação da pausa.
+
+- **Spike S5 (resolvido):** a pausa e a retomada por orçamento ficam em `pauseScopeForBudget` e `resumeScopeFromBudget` (`budgets.ts`). A plataforma já impede que agentes rodem num escopo pausado, então a invariante vale para os runs sem mudança. Cada função ganhou um aviso de uma linha à fila `workflow-run-recovery`; o passe marca o run `paused` (empresa ou agente da etapa atual pausados por orçamento) e restaura o status anterior quando a pausa termina. Durante a pausa, concluir uma etapa é recusado com `409` e a resolução de um gate espera.
+- **Falha de agente (T038) adiada:** a plataforma já repete runs que falham, com limite, e expõe ações de recuperação. Repetir de novo no motor duplicaria essa lógica, e detectar a falha final exigiria outro gancho no heartbeat. Fica para uma iteração própria.
 
 ## R9. Efeito externo
 

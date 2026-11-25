@@ -356,6 +356,7 @@ export function budgetServiceInTransaction(db: Db, publications: ActivityPublica
   const recordActivity = (input: LogActivityInput) => logActivity(db, input, publications);
   async function pauseScopeForBudget(policy: PolicyRow) {
     const now = new Date();
+    await notifyDeliveryWork(db, DELIVERY_QUEUES.workflowRunRecovery, policy.companyId);
     if (policy.scopeType === "agent") {
       const { applyAgentBudgetHoldInTransaction } = await import("./agent-lifecycle.js");
       await applyAgentBudgetHoldInTransaction(db, policy.companyId, policy.scopeId, true, publications);
@@ -425,6 +426,7 @@ export function budgetServiceInTransaction(db: Db, publications: ActivityPublica
     ));
     const observations = await computeObservedSpends(db, policies, now);
     if (policies.some((candidate, index) => hardStopReached(candidate, observations[index]))) return;
+    await notifyDeliveryWork(db, DELIVERY_QUEUES.workflowRunRecovery, policy.companyId);
     // Lifting a budget pause is a hold-release event for deferred work intents.
     await promoteDeferredWorkIntents(db, { companyId: policy.companyId, trigger: "pause_lifted" });
     if (policy.scopeType === "agent") {
