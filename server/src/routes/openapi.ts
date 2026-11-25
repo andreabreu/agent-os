@@ -4,7 +4,7 @@ import { MUSE_ASSET_VERSION, museStopBoundarySchema, museDetectorCleanupAttestat
 import { slackTestMessageSchema, slackTestMessageResultSchema, slackManagerAuthorizationSchema, slackSetupOptionsSchema, slackManagedProvisionSchema, slackManagedResultSchema, slackRegistrationSchema, slackSetupActionSchema, slackInstallAuthorizationSchema, slackRegistrationStateSchema, slackAppConfigurationSchema, slackAvatarStateSchema, slackAccountStateSchema } from "@paperclipai/shared";
 import { experimentalApiMetadata } from "./experimental-api-metadata.js";
 import { LINK_PREVIEW_BATCH_LIMIT, ATTENTION_SOURCE_KINDS } from "@paperclipai/shared";
-import { agentCaseHandoffSchema, caseWorkflowDocumentTextSchema, doneCaseHandoffSchema, createWorkflowSchema, updateWorkflowSchema, listWorkflowsSchema, readWorkflowQuerySchema, publishWorkflowVersionSchema, listWorkflowVersionsSchema, readWorkflowVersionQuerySchema, putDefaultExecutionPolicySchema } from "@paperclipai/shared";
+import { agentCaseHandoffSchema, caseWorkflowDocumentTextSchema, doneCaseHandoffSchema, createWorkflowSchema, updateWorkflowSchema, listWorkflowsSchema, readWorkflowQuerySchema, publishWorkflowVersionSchema, listWorkflowVersionsSchema, readWorkflowVersionQuerySchema, putDefaultExecutionPolicySchema, reassignIssueExecutionStageSchema } from "@paperclipai/shared";
 import {
   experimentalApiDocs,
   experimentalApiPaths,
@@ -14126,6 +14126,12 @@ for (const [method, path, summary] of [
   request: { params: path.includes("{companyId}") ? z.object({ companyId: z.string().uuid() }) : z.object({ id: z.string().uuid() }),
     ...(method === "put" ? { body: jsonBody(putDefaultExecutionPolicySchema) } : {}) },
   responses: { 200: r.ok(), 400: r.badRequest, 401: r.unauthorized, 403: r.forbidden, 404: r.notFound } });
+
+registry.registerPath({ method: "post", path: "/api/issues/{id}/execution-policy/reassign", tags: ["Cases"],
+  summary: "Hand a pending review or approval stage to another configured participant",
+  description: "Requires enableCases and enableWorkflowVersions. Only the stage's active participant or a board user may reassign. The target must already be configured on the pending stage and cannot be the executor under review. A comment is required. Reassigning to the active participant is a no-op. Refused with 409 code execution_stage_participant_running while a run is executing the task. The round counter and decision history are kept; an agent target is woken.",
+  request: { params: z.object({ id: z.string().uuid() }), body: jsonBody(reassignIssueExecutionStageSchema) },
+  responses: { 200: r.ok(), 400: r.badRequest, 401: r.unauthorized, 403: r.forbidden, 404: r.notFound, 409: r.conflict, 422: r.unprocessable } });
 
 for (const [method, path, body] of experimentalApiPaths) {
   const query = experimentalApiQueries[`${method.toUpperCase()} ${path}`];

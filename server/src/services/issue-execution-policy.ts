@@ -11,7 +11,7 @@ import type {
   IssueMonitorScheduledBy,
 } from "@paperclipai/shared";
 import { issueExecutionPolicySchema, issueExecutionStateSchema } from "@paperclipai/shared";
-import { unprocessable } from "../errors.js";
+import { conflict, forbidden, unprocessable } from "../errors.js";
 
 type AssigneeLike = {
   assigneeAgentId?: string | null;
@@ -508,6 +508,82 @@ function patchForPrincipal(principal: IssueExecutionStagePrincipal | null) {
   return principal.type === "agent"
     ? { assigneeAgentId: principal.agentId ?? null, assigneeUserId: null }
     : { assigneeAgentId: null, assigneeUserId: principal.userId ?? null };
+}
+
+type ReassignStageInput = {
+  issue: IssueLike & { executionRunId?: string | null; checkoutRunId?: string | null };
+  policy: IssueExecutionPolicy | null;
+  actor: ActorLike;
+  isBoardActor: boolean;
+  toParticipant: IssueExecutionStagePrincipal;
+  comment?: string | null;
+};
+
+type ReassignStageResult =
+  | { changed: false }
+  | {
+    changed: true;
+    patch: Record<string, unknown>;
+    decision: Pick<IssueExecutionDecision, "stageId" | "stageType" | "outcome" | "body">;
+  };
+
+export const EXECUTION_STAGE_PARTICIPANT_RUNNING_CODE = "execution_stage_participant_running";
+
+/**
+ * Hands a pending review or approval stage to another participant already configured on it.
+ * Adapted from upstream #15265. The stage, its round counter and its decision history are kept.
+ * @param input The locked issue, its policy, the acting principal and the target participant
+ * @returns The issue patch and decision to record, or `changed: false` when the target is already active
+ */
+export function applyIssueExecutionStageReassignment(input: ReassignStageInput): ReassignStageResult {
+  const existingState = parseIssueExecutionState(input.issue.executionState);
+  const activeStage = input.policy ? findStageById(input.policy, existingState?.currentStageId) : null;
+  if (!input.policy || !activeStage || existingState?.status !== PENDING_STATUS) {
+    throw unprocessable("This issue has no pending execution stage to reassign");
+  }
+
+  const currentParticipant =
+    existingState.currentParticipant ??
+    selectStageParticipant(activeStage, { exclude: existingState.returnAssignee ?? null });
+  if (!currentParticipant) {
+    throw unprocessable(`No eligible ${activeStage.type} participant is configured for this issue`);
+  }
+  if (!input.isBoardActor && !principalsEqual(currentParticipant, actorPrincipal(input.actor))) {
+    throw forbidden("Only the active reviewer or approver can reassign the current execution stage");
+  }
+  if (!stageHasParticipant(activeStage, input.toParticipant)) {
+    throw unprocessable("The reassignment target must already be a configured participant on this stage");
+  }
+  if (existingState.returnAssignee && principalsEqual(input.toParticipant, existingState.returnAssignee)) {
+    throw unprocessable("Cannot reassign this stage to the executor whose own work is under review");
+  }
+  if (principalsEqual(input.toParticipant, currentParticipant)) return { changed: false };
+  if (!input.comment?.trim()) {
+    throw unprocessable(`Reassigning a review or approval stage requires a comment. ${STAGE_DECISION_COMMENT_HINT}`);
+  }
+  // Stopping the outgoing participant's run safely lives inside the issue PATCH
+  // route; until it is extracted, a stage owned by a running execution is refused.
+  if (input.issue.executionRunId || input.issue.checkoutRunId) {
+    throw conflict("A run is executing this task; wait for it to finish or stop it before reassigning the stage", {
+      code: EXECUTION_STAGE_PARTICIPANT_RUNNING_CODE,
+    });
+  }
+
+  const comment = input.comment.trim();
+  const reassignedState: IssueExecutionState = {
+    ...existingState,
+    status: PENDING_STATUS,
+    currentStageId: activeStage.id,
+    currentStageType: activeStage.type,
+    currentParticipant: input.toParticipant,
+    lastDecisionOutcome: "reassigned",
+    lastReassignment: { fromParticipant: currentParticipant, toParticipant: input.toParticipant, comment },
+  };
+  return {
+    changed: true,
+    patch: { status: "in_review", ...patchForPrincipal(input.toParticipant), executionState: reassignedState },
+    decision: { stageId: activeStage.id, stageType: activeStage.type, outcome: "reassigned", body: comment },
+  };
 }
 
 function buildCompletedState(previous: IssueExecutionState | null, currentStage: IssueExecutionStage): IssueExecutionState {

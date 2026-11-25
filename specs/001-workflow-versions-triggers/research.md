@@ -53,6 +53,16 @@ Levantamento feito no `master` (`1a57a2abec`) e nas PRs upstream #15267 e #15265
 - **Racional**: manter `routes/issues.ts` quase intocado.
 - **Bugs de estágio a revisar antes** (upstream, abertos): #21546, #21575, #21639, #19237, #4912; os que se reproduzirem no fork viram tarefas separadas, fora desta spec.
 
+## R7b. Bugs de estágio do upstream no fork (T034)
+
+Verificação por leitura do código do fork (`server/src/services/issue-execution-policy.ts`), sem teste de reprodução. Os cinco estão presentes. Ficam como itens separados, fora desta spec, e afetam a spec 002, que constrói gates sobre a execution policy.
+
+| Upstream | Problema | Evidência no fork | Prioridade sugerida |
+| --- | --- | --- | --- |
+| #21546, #19237, #4912 | Ao aprovar um estágio, o próximo estágio cujo único participante é o autor trava com `422 No eligible … participant` | `selectStageParticipant(nextStage, { exclude: returnAssignee })` seguido de `throw` (linhas ~904 a 909), sem o laço `canAutoSkipPendingStage` que o início do fluxo usa (linha ~1087) | Alta: um gate de workflow com o autor como aprovador fica preso |
+| #21575 | Entrar em `in_review` só para esperar uma pergunta humana inicia o estágio de revisão e tira a tarefa de quem espera a resposta | Não existe `hasPendingHumanInputWait` no fork | Média: afeta etapas de formulário da spec 002 |
+| #21639 | O revisor pendente é barrado pelo gate de dependências (`issue_dependencies_blocked`) e a revisão não roda | Não existe `isPendingExecutionStageParticipant` no fork | Média |
+
 ## R8. Ferramentas nativas
 
 - **Decisão**: acrescentar `list_workflow_versions` e `read_workflow_version` em `native-workflow-tools.ts`, somente leitura, com a mesma paginação por `snapshot` de `read_workflow`. Escrita (publicar) só por REST, via `authorizeCaseCreation`.

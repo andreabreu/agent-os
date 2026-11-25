@@ -849,6 +849,13 @@ export interface IssueExecutionState {
   monitor?: IssueExecutionMonitorState | null;
   /** Consecutive agent-initiated changes-requested rounds on the current stage. */
   changesRequestedCount?: number;
+  lastReassignment?: IssueExecutionReassignment | null;
+}
+
+export interface IssueExecutionReassignment {
+  fromParticipant: IssueExecutionStagePrincipal;
+  toParticipant: IssueExecutionStagePrincipal;
+  comment: string;
 }
 
 export interface IssueExecutionDecision {
