@@ -103,6 +103,9 @@ workflow is archived or has no published version, the run fails with that
 reason and creates no task. `heartbeat` triggers never start work and are
 unaffected.
 
+When the latest version can run, the dispatch also starts a case and a run;
+see [workflow-runs.md](workflow-runs.md#starting-a-run).
+
 The target lives in its own table (`routine_workflow_targets`) so the routine
 table and its strict revision snapshot are untouched. As a result, routine
 revisions do not capture the target.

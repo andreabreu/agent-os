@@ -33,3 +33,22 @@ Pré-requisitos: spec 001 implementada, `pnpm dev`, flags `enableCases` e `enabl
 pnpm db:generate && pnpm -r typecheck
 pnpm verify
 ```
+
+## Resultado da validação (2026-11-25)
+
+Não houve execução numa instância de dev: um gate só abre a partir de uma run real de agente, e os adapters de uma instância limpa não trabalham. Cada passo foi validado por testes de integração com banco real:
+
+| Passo | Teste |
+| --- | --- |
+| 2a.1–2a.5 | `workflow-runs-advance.integration.test.ts` (início preso à versão, `missing_outputs`, entrega à etapa seguinte com entradas, um run ativo por case, handoff livre recusado) e o cancelamento em `workflow-runs-control.integration.test.ts` |
+| 2b.1–2b.3 | `workflow-runs-gates.integration.test.ts` (decisão com uma opção por outcome, decisor recusado, comentário obrigatório, devolução e limite de rodadas) |
+| 2b.4 | `workflow-runs-gates.integration.test.ts` (formulário incompleto recusado, documento criado, etapa seguinte) |
+| 2b.5 | `workflow-runs-control.integration.test.ts`, com a pausa de orçamento da empresa; a pausa de um agente segue o mesmo código, sem teste próprio |
+| 2b.6 | `workflow-runs-control.integration.test.ts` (decisão resolvida sem aviso ao run é processada uma vez pelo passe de recuperação) |
+| 2c.1 | `workflow-runs-routine.integration.test.ts` (manual, `api`, webhook e `schedule`; entrega repetida pela `api`). A deduplicação de webhook é da própria rotina e não tem caso aqui |
+| 2c.2 | `packages/shared/src/workflow-spec-graph.test.ts` e o teste de versão antiga em `workflow-runs-advance.integration.test.ts` |
+| 2c.3 | `workflow-runs-gates.integration.test.ts` (lembretes por intervalo, limite do `timeoutSec`, `waitedMs`) |
+| 2c.4 | `workflow-runs-gates.integration.test.ts` (resumo de mudanças na segunda rodada) e `workflow-run-diff.test.ts` |
+| 2c.5 | `workflow-simulate.test.ts` e o teste da rota em `workflow-runs-control.integration.test.ts` |
+
+`node scripts/typecheck-low-memory.mjs` passou no repositório inteiro. `pnpm verify` sai com código 2 porque `.claude/skills` é entrada global de CI; a cobertura ampla fica para o CI.

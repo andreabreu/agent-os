@@ -238,11 +238,11 @@ Monorepo pnpm: `packages/db`, `packages/shared`, `server`. Sem UI nesta fase. Ar
 
 ## Phase 13: Polish & Cross-Cutting Concerns
 
-- [ ] T066 [P] Escrever `doc/workflow-runs.md` com o comportamento do subsistema (arquitetura híbrida, `complete_workflow_step`, gates como decisões, limites de TTL, formulário, etapa humana, recuperação, orçamento, simulação) e linkar em "More documentation" de `doc/DEVELOPING.md`
-- [ ] T067 [P] Conferir que nenhum arquivo novo passa de 1.000 linhas e que os acréscimos em `case-handoffs.ts`, `decisions.ts`, `routines.ts`, `budgets.ts` e `server/src/index.ts` são pontos de extensão curtos (regra `pull-request-review`)
-- [ ] T068 Rodar `pnpm -r typecheck` (ou `node scripts/typecheck-low-memory.mjs`) e `pnpm verify`; se `pnpm verify` sair com código 2, rodar os checks focados e registrar o que fica para o CI
-- [ ] T069 Executar o `quickstart.md` de ponta a ponta numa instância de dev com as flags ligadas e registrar o resultado
-- [ ] T070 Atualizar `doc/plans/2026-11-24-agent-workflows-hitl.md` marcando a fase 2 como especificada e linkando `specs/002-workflow-runs-hitl/`
+- [X] T066 [P] Escrever `doc/workflow-runs.md` com o comportamento do subsistema (arquitetura híbrida, `complete_workflow_step`, gates como decisões, limites de TTL, formulário, etapa humana, recuperação, orçamento, simulação) e linkar em "More documentation" de `doc/DEVELOPING.md`
+- [X] T067 [P] Conferir que nenhum arquivo novo passa de 1.000 linhas e que os acréscimos em `case-handoffs.ts`, `decisions.ts`, `routines.ts`, `budgets.ts` e `server/src/index.ts` são pontos de extensão curtos (regra `pull-request-review`)
+- [X] T068 Rodar `pnpm -r typecheck` (ou `node scripts/typecheck-low-memory.mjs`) e `pnpm verify`; se `pnpm verify` sair com código 2, rodar os checks focados e registrar o que fica para o CI
+- [X] T069 (Validado por testes de integração, sem instância de dev; ver o resultado no `quickstart.md`) Executar o `quickstart.md` de ponta a ponta numa instância de dev com as flags ligadas e registrar o resultado
+- [X] T070 Atualizar `doc/plans/2026-11-24-agent-workflows-hitl.md` marcando a fase 2 como especificada e linkando `specs/002-workflow-runs-hitl/`
 
 ---
 
