@@ -28,10 +28,16 @@ Levantamento no `master` (`1a57a2abec`) para a spec 002. Os itens marcados "Spik
   - Todo caminho até um `approval_gate` passa por ao menos uma etapa de agente (o último agente que segurou o case é a origem da decisão), o que mantém válido o exemplo pesquisa, redação, revisão humana, aprovação, publicação. Isso entra como regra de validação do grafo e é o spike S2.
 - **Alternativas**: `request_confirmation` na tarefa (só aceitar ou rejeitar, não casa com N outcomes); estágio de aprovação da execution policy (só protege a conclusão da tarefa).
 
+- **Spike S2 (resolvido):** `decisionService.create` exige uma run do agente de origem com `contextSnapshot.issueId`, mas não exige que ela esteja em execução. O gate usa a run mais recente, na tarefa do case, do último agente que segurou o case; serve inclusive depois de uma etapa humana. Sem nenhuma run desse agente na tarefa (por exemplo, quando o board concluiu tudo), o run vai a `waiting_human` com o motivo.
+- **Aviso ao motor:** com `continuationPolicy = none` nada avisava o motor. Pontos de extensão curtos em `decisions.ts` (depois de decidir e de cancelar) e em `decision-expiry.ts` (depois de expirar) chamam `notifyWorkflowGate`, que carrega o motor por `import()` dinâmico para evitar import circular e só age em decisões com `metadata.workflowGate`. Falha no motor é registrada em log e nunca desfaz a decisão.
+- **Autoridade de quem decide (F2):** `assertWorkflowGateDecider` em `decisions.ts` aceita o usuário declarado (`owner.kind = user`), quem tem o papel declarado (`owner.kind = role`, papel de membership) e a gestão (board local, admin da instância, `owner` ou `admin` da empresa).
+- **Sem ator, sem elevação:** a resolução de um gate faz o handoff seguinte em nome de quem decidiu. Sem ator, o run espera uma pessoa em vez de usar uma autoridade de sistema.
+
 ## R3. Comentário obrigatório só ao devolver
 
 - **Decisão**: acrescentar `requiredInputIds` opcional à opção de decisão (`decisionOptionSchema`), validado quando a decisão é resolvida. O gate declara um input `comment`; as opções de devolver e rejeitar o exigem, a de aprovar não.
 - **Racional**: `inputs` é da decisão inteira; sem isso não há como exigir só em algumas opções. Mudança aditiva no módulo dono, justificada na PR (spike S3).
+- **Spike S3 (resolvido):** a validação de `inputs` fica em `decide` (`decisions.ts`); `requiredInputIds` foi acrescentado ao schema e ao tipo da opção e é checado logo depois. Sem `commentRequiredOn`, o padrão é exigir comentário em todos os outcomes menos o primeiro.
 
 ## R4. Etapa humana
 

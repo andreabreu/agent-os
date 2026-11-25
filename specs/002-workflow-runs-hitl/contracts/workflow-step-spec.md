@@ -10,7 +10,7 @@ Estende `workflow-spec.ts` da spec 001 de forma aditiva; versões `specVersion: 
 | `externalEffect` | `agent_task` | `true` exige gate aprovado como antecessor imediato em todos os caminhos |
 | `timeoutSec` | `approval_gate`, `input_form` | Inteiro de 60 a 2.592.000 (30 dias); escala ao responsável, nunca decide |
 | `reminderAfterSec` | `approval_gate`, `input_form` | Menor que `timeoutSec` quando ambos existem |
-| `commentRequiredOn` | `approval_gate` | Lista de outcomes que exigem comentário; padrão: os de devolução e rejeição |
+| `commentRequiredOn` | `approval_gate` | Lista de outcomes que exigem comentário; padrão: todos menos o primeiro outcome declarado |
 | `questions` | `input_form` | Obrigatório; 1 a 20 perguntas; `kind` em `text`, `single_choice`, `multi_choice`, `number`, `date` |
 
 ## Tipos de etapa aceitos nesta fase

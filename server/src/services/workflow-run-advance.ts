@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { cases, workflowRunEvents, workflowRunSteps, workflowRuns, workflowVersions, workflows, type Db } from "@paperclipai/db";
 import { planStepOutcome, type CompleteWorkflowStep, type StepOutcomePlan } from "@paperclipai/shared";
@@ -96,8 +97,8 @@ export async function completeWorkflowStep(db: Db, companyId: string, runId: str
     });
   }
 
-  const handoffId = plan.kind === "advance"
-    ? await handOffToNextStep(db, { companyId, run, spec, plan, actor, summary: input.summary ?? null })
+  const prepared = plan.kind === "advance"
+    ? await prepareNextStep(db, { companyId, run, spec, plan, actor, summary: input.summary ?? null, originAgentId: current.assigneeAgentId })
     : null;
 
   await writeWithActivity(db, async (tx, publications) => {
@@ -109,7 +110,7 @@ export async function completeWorkflowStep(db: Db, companyId: string, runId: str
       payload: { stepKey, attempt: current.attempt, outcome: input.outcome, summary: input.summary ?? null } });
     await tx.update(workflowRunSteps).set({ status: "completed", outcome: input.outcome, outputRevisionIds: outputs.revisions,
       closedAt: new Date() }).where(eq(workflowRunSteps.id, current.id));
-    await applyPlan(tx, { companyId, runId, spec, plan, handoffId, actor });
+    await applyPlan(tx, { companyId, runId, spec, plan, prepared, actor });
     publications.push((await persistActivity(tx, {
       companyId, ...runActivityActor(actor), runId: actor.runId ?? null,
       action: planActivity(plan), entityType: "workflow_run", entityId: runId,
@@ -127,55 +128,100 @@ function planActivity(plan: Exclude<StepOutcomePlan, { kind: "invalid_outcome" }
   return "workflow_run.step_completed";
 }
 
-async function handOffToNextStep(db: Db, input: {
+export type PreparedNextStep =
+  | { kind: "handoff"; handoffId: string }
+  | { kind: "gate"; decisionId: string }
+  | { kind: "blocked"; reason: string };
+
+/**
+ * Starts the work of the step a plan advances to, before the run's own state is written.
+ * An agent step receives the case by handoff; an approval gate opens a decision. Both are idempotent by key.
+ */
+export async function prepareNextStep(db: Db, input: {
   companyId: string;
   run: typeof workflowRuns.$inferSelect;
   spec: Awaited<ReturnType<typeof loadRunSpec>>;
   plan: Extract<StepOutcomePlan, { kind: "advance" }>;
   actor: AuthorizationActor;
   summary: string | null;
-}) {
+  originAgentId: string | null;
+  /** A gate resolution has no caller to retry, so a failed transfer becomes a wait for a person. */
+  escalateHandoffFailure?: boolean;
+}): Promise<PreparedNextStep> {
   const next = findStep(input.spec, input.plan.stepKey);
+  if (next.type === "approval_gate") {
+    const { openGate } = await import("./workflow-run-gates.js");
+    return openGate(db, { companyId: input.companyId, run: input.run, spec: input.spec, step: next,
+      attempt: input.plan.attempt, originAgentId: input.originAgentId, summary: input.summary });
+  }
   const [workflow] = await db.select({ name: workflows.name }).from(workflows).where(eq(workflows.id, input.run.workflowId));
   const [version] = await db.select({ version: workflowVersions.version }).from(workflowVersions)
     .where(eq(workflowVersions.id, input.run.versionId));
-  const handoff = await caseHandoffService(db).handoff(input.companyId, input.actor, {
-    idempotencyKey: `workflow-run:${input.run.id}:${next.key}:${input.plan.attempt}`,
-    case: { id: input.run.caseId },
-    ...await caseHandoffExpectations(db, input.run.caseId),
-    toAgentId: next.owner.ref,
-    phase: next.key,
-    instructions: buildStepInstructions({ workflowName: workflow!.name, version: version!.version, runId: input.run.id,
-      spec: input.spec, step: next, attempt: input.plan.attempt, previousSummary: input.summary }),
-  }, { workflowRunId: input.run.id });
-  return handoff.handoffId;
+  try {
+    const handoff = await caseHandoffService(db).handoff(input.companyId, input.actor, {
+      idempotencyKey: `workflow-run:${input.run.id}:${next.key}:${input.plan.attempt}`,
+      case: { id: input.run.caseId },
+      ...await caseHandoffExpectations(db, input.run.caseId),
+      toAgentId: next.owner.ref,
+      phase: next.key,
+      instructions: buildStepInstructions({ workflowName: workflow!.name, version: version!.version, runId: input.run.id,
+        spec: input.spec, step: next, attempt: input.plan.attempt, previousSummary: input.summary }),
+    }, { workflowRunId: input.run.id });
+    return { kind: "handoff", handoffId: handoff.handoffId };
+  } catch (error) {
+    if (!input.escalateHandoffFailure) throw error;
+    const reason = error instanceof Error ? error.message : String(error);
+    return { kind: "blocked", reason: `Could not hand the case to step "${next.key}": ${reason}` };
+  }
 }
 
-async function applyPlan(tx: Db, input: {
+export async function applyPlan(tx: Db, input: {
   companyId: string;
   runId: string;
   spec: Awaited<ReturnType<typeof loadRunSpec>>;
   plan: Exclude<StepOutcomePlan, { kind: "invalid_outcome" }>;
-  handoffId: string | null;
-  actor: AuthorizationActor;
+  prepared: PreparedNextStep | null;
+  actor: AuthorizationActor | null;
 }) {
   const now = new Date();
-  if (input.plan.kind === "advance") {
+  const actor = input.actor ? eventActor(input.actor) : { actorType: "system", actorId: "workflow-run" };
+  if (input.plan.kind === "advance" && input.prepared && input.prepared.kind !== "blocked") {
     const next = findStep(input.spec, input.plan.stepKey);
+    const gate = input.prepared.kind === "gate";
     await tx.insert(workflowRunSteps).values({ runId: input.runId, companyId: input.companyId, stepKey: next.key,
-      attempt: input.plan.attempt, status: "running", assigneeAgentId: next.owner.ref, handoffId: input.handoffId });
-    await tx.update(workflowRuns).set({ currentStepKey: next.key, updatedAt: now }).where(eq(workflowRuns.id, input.runId));
+      attempt: input.plan.attempt, status: gate ? "awaiting_approval" : "running",
+      assigneeAgentId: next.owner.kind === "agent" ? next.owner.ref : null,
+      assigneeUserId: next.owner.kind === "user" ? next.owner.ref : null,
+      handoffId: input.prepared.kind === "handoff" ? input.prepared.handoffId : null,
+      decisionId: input.prepared.kind === "gate" ? input.prepared.decisionId : null });
+    await tx.update(workflowRuns).set({ currentStepKey: next.key, status: gate ? "waiting_human" : "running",
+      statusReason: gate ? `Waiting for a decision on "${next.name}"` : null, updatedAt: now }).where(eq(workflowRuns.id, input.runId));
+    if (input.prepared.kind === "gate") {
+      const { decisionId } = input.prepared;
+      await tx.insert(workflowRunEvents).values({ runId: input.runId, companyId: input.companyId,
+        eventKey: `gate_opened:${decisionId}`, kind: "gate_opened", ...actor,
+        payload: { stepKey: next.key, attempt: input.plan.attempt, decisionId } });
+    }
     return;
   }
   if (input.plan.kind === "complete") {
-    await tx.update(workflowRuns).set({ status: "completed", currentStepKey: null, completedAt: now, updatedAt: now })
+    await tx.update(workflowRuns).set({ status: "completed", currentStepKey: null, statusReason: null, completedAt: now, updatedAt: now })
       .where(eq(workflowRuns.id, input.runId));
     await tx.insert(workflowRunEvents).values({ runId: input.runId, companyId: input.companyId, eventKey: "completed",
-      kind: "completed", ...eventActor(input.actor), payload: {} });
+      kind: "completed", ...actor, payload: {} });
     return;
   }
-  await tx.update(workflowRuns).set({ status: "waiting_human", statusReason: input.plan.reason, updatedAt: now })
+  const reason = input.plan.kind === "escalate" ? input.plan.reason
+    : input.prepared?.kind === "blocked" ? input.prepared.reason : "The run needs a person to continue";
+  await escalateRun(tx, { companyId: input.companyId, runId: input.runId, reason, actor });
+}
+
+export async function escalateRun(tx: Db, input: { companyId: string; runId: string; reason: string;
+  actor: { actorType: string; actorId: string | null } }) {
+  const now = new Date();
+  await tx.update(workflowRuns).set({ status: "waiting_human", statusReason: input.reason, updatedAt: now })
     .where(eq(workflowRuns.id, input.runId));
   await tx.insert(workflowRunEvents).values({ runId: input.runId, companyId: input.companyId,
-    eventKey: `escalated:${now.toISOString()}`, kind: "escalated", ...eventActor(input.actor), payload: { reason: input.plan.reason } });
+    eventKey: `escalated:${randomUUID()}`, kind: "escalated", ...input.actor,
+    payload: { reason: input.reason } });
 }

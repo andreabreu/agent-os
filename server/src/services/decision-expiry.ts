@@ -2,6 +2,7 @@ import { and, asc, eq, getTableColumns, lte, sql } from "drizzle-orm";
 import { decisions, type Db } from "@paperclipai/db";
 import { logActivity, publishActivity, type ActivityPublication } from "./activity-log.js";
 import { writeDecisionChange } from "./decision-work-notifications.js";
+import { notifyWorkflowGate } from "./workflow-run-gate-hooks.js";
 
 type Decision = typeof decisions.$inferSelect;
 type ExpiryReason = "ttl" | "target_gone" | "target_completed";
@@ -27,6 +28,7 @@ export function decisionExpiryService(db: Db, deliverContinuation: (id: string) 
     if (!updated) return 0;
     for (const publication of publications) publishActivity(publication);
     await deliverContinuation(updated.id);
+    await notifyWorkflowGate(db, updated, null);
     return 1;
   }
 

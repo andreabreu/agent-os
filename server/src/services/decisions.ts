@@ -1,3 +1,4 @@
+import { assertWorkflowGateDecider, notifyWorkflowGate } from "./workflow-run-gate-hooks.js";
 import { assertAgentInteraction } from "./agent-interaction-policy.js";
 import { decisionTargetService, notifyDecisionTargetWork } from "./decision-targets.js";
 import { randomUUID } from "node:crypto";
@@ -726,6 +727,10 @@ export function decisionService(db: Db, options: DecisionServiceOptions) {
     if (!current.options.some((option) => option.id === input.optionId)) throw unprocessable("Unknown optionId");
     const values = input.inputValues ?? {};
     for (const field of current.inputs ?? []) { const value = values[field.id] ?? ""; if (field.required && !value.trim()) throw unprocessable(`Input ${field.id} is required`); if (field.maxLength && value.length > field.maxLength) throw unprocessable(`Input ${field.id} is too long`); }
+    for (const fieldId of current.options.find((option) => option.id === input.optionId)?.requiredInputIds ?? []) {
+      if (!(values[fieldId] ?? "").trim()) throw unprocessable(`Input ${fieldId} is required for option ${input.optionId}`);
+    }
+    await assertWorkflowGateDecider(db, current, input.userActor, input.decidedByUserId);
     const [claimed] = await writeDecisionChange(db, async tx => tx.update(decisions).set({ status: "decided", executionStatus: "running", chosenOptionId: input.optionId, inputValues: values,
       decidedByUserId: input.decidedByUserId, decidedAt: new Date(), updatedAt: new Date(), metadata: { ...metadata,
         decideIdempotencyKey: input.idempotencyKey ?? null,
@@ -738,7 +743,9 @@ export function decisionService(db: Db, options: DecisionServiceOptions) {
       responsibleUserIdOverride: input.decidedByUserId, action: input.dismissed ? "decision.dismissed" : "decision.decided", entityType: "decision", entityId: claimed.id,
       details: { chosenOptionId: input.optionId, decidedByUserId: input.decidedByUserId, originResponsibleUserId: run?.responsibleUserId ?? null,
         ...(input.dismissed ? { dismissed: true, dismissReason: input.dismissReason ?? null } : {}), ...input.activityDetails } });
-    return resumeDecision(claimed, input.userActor);
+    const resolved = await resumeDecision(claimed, input.userActor);
+    await notifyWorkflowGate(db, claimed, input.userActor);
+    return resolved;
   }
 
   async function cancel(id: string, actor: { actorType: "agent" | "user"; actorId: string; runId?: string | null },
@@ -761,6 +768,7 @@ export function decisionService(db: Db, options: DecisionServiceOptions) {
     await logActivity(db, { companyId: updated.companyId, actorType: actor.actorType, actorId: actor.actorId, runId: actor.runId, action: "decision.cancelled", entityType: "decision", entityId: id,
       ...(Object.keys(details).length > 0 ? { details } : {}) });
     await continuations.deliver(updated.id);
+    await notifyWorkflowGate(db, updated, null);
     return (await get(id))!;
   }
 

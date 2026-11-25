@@ -18,7 +18,11 @@ import { persistActivity, publishActivity, type ActivityPublication } from "./ac
 import type { AuthorizationActor } from "./authorization.js";
 
 export const WORKFLOW_NOT_EXECUTABLE_CODE = "workflow_not_executable";
-const STEP_TYPES_RUNNABLE_NOW: readonly string[] = ["agent_task"];
+function isRunnableNow(step: WorkflowStep) {
+  if (step.type === "agent_task") return step.owner.kind === "agent";
+  if (step.type === "approval_gate") return step.owner.kind === "user" || step.owner.kind === "role";
+  return false;
+}
 const RECENT_EVENT_LIMIT = 50;
 const ACTIVE_RUN_UNIQUE_INDEX = "workflow_runs_active_case_uq";
 
@@ -94,7 +98,7 @@ export function buildStepInstructions(input: {
 }
 
 async function assertRunnable(db: Db, companyId: string, spec: WorkflowSpec) {
-  const unsupported = spec.steps.filter((step) => !STEP_TYPES_RUNNABLE_NOW.includes(step.type) || step.owner.kind !== "agent");
+  const unsupported = spec.steps.filter((step) => !isRunnableNow(step));
   const graphIssues = isExecutableWorkflowSpec(spec) ? [] : validateWorkflowGraph(spec);
   if (unsupported.length > 0 || graphIssues.length > 0) {
     throw unprocessable("This workflow version cannot run yet", {
@@ -103,7 +107,7 @@ async function assertRunnable(db: Db, companyId: string, spec: WorkflowSpec) {
       issues: graphIssues,
     });
   }
-  const ownerIds = [...new Set(spec.steps.map((step) => step.owner.ref))];
+  const ownerIds = [...new Set(spec.steps.filter((step) => step.owner.kind === "agent").map((step) => step.owner.ref))];
   const known = await db.select({ id: agents.id }).from(agents).where(eq(agents.companyId, companyId));
   const knownIds = new Set(known.map((agent) => agent.id));
   const missing = ownerIds.filter((id) => !knownIds.has(id));
