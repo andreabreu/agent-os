@@ -3543,6 +3543,13 @@
       "when": 1795612909781,
       "tag": "0507_outgoing_anthem",
       "breakpoints": true
+    },
+    {
+      "idx": 508,
+      "version": "7",
+      "when": 1795619974505,
+      "tag": "0508_curved_warbound",
+      "breakpoints": true
     }
   ]
 }

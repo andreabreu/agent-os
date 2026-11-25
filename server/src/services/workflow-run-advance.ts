@@ -7,6 +7,7 @@ import { documentService } from "./documents.js";
 import { caseHandoffService } from "./case-handoffs.js";
 import { requireWorkflowVersionsEnabled } from "./workflow-versions.js";
 import { persistActivity } from "./activity-log.js";
+import { DELIVERY_QUEUES, notifyDeliveryWork } from "./delivery-work-notifications.js";
 import { assertHumanStepActor, assignHumanStep, returnTaskFromPerson } from "./workflow-run-human.js";
 import type { AuthorizationActor } from "./authorization.js";
 import {
@@ -137,6 +138,7 @@ export type PreparedNextStep =
   | { kind: "handoff"; handoffId: string }
   | { kind: "gate"; decisionId: string }
   | { kind: "human"; assigned: boolean; parkedAgentId: string | null }
+  | { kind: "form" }
   | { kind: "blocked"; reason: string };
 
 /**
@@ -157,6 +159,7 @@ export async function prepareNextStep(db: Db, input: {
   fromHumanStep?: { parkedAgentId: string | null };
 }): Promise<PreparedNextStep> {
   const next = findStep(input.spec, input.plan.stepKey);
+  if (next.type === "input_form") return { kind: "form" };
   if (next.type === "human_task") {
     const assignment = await assignHumanStep(db, { caseId: input.run.caseId, step: next });
     return { kind: "human", ...assignment, parkedAgentId: input.fromHumanStep?.parkedAgentId ?? assignment.parkedAgentId };
@@ -203,17 +206,23 @@ export async function applyPlan(tx: Db, input: {
   if (input.plan.kind === "advance" && input.prepared && input.prepared.kind !== "blocked") {
     const next = findStep(input.spec, input.plan.stepKey);
     const human = input.prepared.kind === "human" ? input.prepared : null;
-    const gate = input.prepared.kind === "gate" || human !== null;
+    const form = input.prepared.kind === "form";
+    const gate = input.prepared.kind === "gate" || human !== null || form;
+    const timeoutSec = form ? next.limits.timeoutSec : undefined;
     await tx.insert(workflowRunSteps).values({ runId: input.runId, companyId: input.companyId, stepKey: next.key,
       attempt: input.plan.attempt,
-      status: human ? (human.assigned ? "running" : "ready") : input.prepared.kind === "gate" ? "awaiting_approval" : "running",
+      status: human ? (human.assigned ? "running" : "ready") : form ? "awaiting_input"
+        : input.prepared.kind === "gate" ? "awaiting_approval" : "running",
+      dueAt: timeoutSec ? new Date(now.getTime() + timeoutSec * 1_000) : null,
       assigneeAgentId: human ? human.parkedAgentId : next.owner.kind === "agent" ? next.owner.ref : null,
       assigneeUserId: next.owner.kind === "user" ? next.owner.ref : null,
       handoffId: input.prepared.kind === "handoff" ? input.prepared.handoffId : null,
       decisionId: input.prepared.kind === "gate" ? input.prepared.decisionId : null });
     await tx.update(workflowRuns).set({ currentStepKey: next.key, status: gate ? "waiting_human" : "running",
-      statusReason: human ? `Waiting for ${next.owner.ref} on "${next.name}"` : gate ? `Waiting for a decision on "${next.name}"` : null,
+      statusReason: human ? `Waiting for ${next.owner.ref} on "${next.name}"` : form ? `Waiting for answers on "${next.name}"`
+        : gate ? `Waiting for a decision on "${next.name}"` : null,
       updatedAt: now }).where(eq(workflowRuns.id, input.runId));
+    if (timeoutSec) await notifyDeliveryWork(tx, DELIVERY_QUEUES.workflowRunRecovery, input.companyId);
     if (input.prepared.kind === "gate") {
       const { decisionId } = input.prepared;
       await tx.insert(workflowRunEvents).values({ runId: input.runId, companyId: input.companyId,

@@ -11,6 +11,7 @@ import { findStep, loadRun, loadRunSpec, readRunView, runActivityActor, writeWit
 import { escalateRun } from "./workflow-run-advance.js";
 import { gateReopenCount, onWorkflowGateResolved, openGate } from "./workflow-run-gates.js";
 import { assignReadyHumanSteps } from "./workflow-run-human.js";
+import { escalateOverdueForms } from "./workflow-run-forms.js";
 
 const MANAGEMENT_ROLES: readonly string[] = ["owner", "admin"];
 const OPEN_STEP_STATUSES = ["pending", "ready", "running", "awaiting_review", "awaiting_approval", "awaiting_input"];
@@ -233,5 +234,6 @@ export async function recoverWorkflowRuns(db: Db) {
   }
   await assignReadyHumanSteps(db, RECOVERY_BATCH);
   await escalateStuckAgentSteps(db);
+  await escalateOverdueForms(db);
 }
 

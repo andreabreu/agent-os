@@ -54,6 +54,8 @@ Levantamento no `master` (`1a57a2abec`) para a spec 002. Os itens marcados "Spik
 - **Racional**: reaproveita a pergunta estruturada ao humano e seu fluxo de resposta e wake. O tipo "número" e "data" ficam como validação no servidor sobre texto.
 - **A confirmar**: se `ask_user_questions` aceita criação pelo servidor sem agente; caso exija agente, usar o agente que concluiu a etapa anterior (mesmo padrão do gate).
 
+- **Revisado na implementação (T045):** `ask_user_questions` só aceita perguntas de escolha (`options` com mínimo de 1), sem texto, número ou data, e responder a interação exigiria mais um ponto de extensão na resolução de interações. Como esta fase não tem tela, as respostas chegam pela rota do contrato, `POST /api/workflow-runs/{id}/steps/{stepKey}/submit-form`, validadas por `validateFormAnswers` e salvas como documento do case na primeira chave de saída da etapa (ou na chave da etapa). Mostrar o formulário no thread da tarefa fica para quando houver UI. A tarefa não muda de dono durante o formulário. O prazo usa a coluna `due_at` da etapa; o passe de recuperação tem o próximo `due_at` como agenda e escala o run uma única vez quando o prazo passa.
+
 ## R6. Avanço idempotente e recuperação
 
 - **Decisão**: cada evento (conclusão, decisão resolvida, resposta, pausa e retomada por orçamento) chama `advance(runId, eventKey)`, uma transação que grava o evento com `UNIQUE (run_id, event_key)`, calcula as próximas etapas e cria o trabalho; repetir o mesmo evento não muda o estado. Na inicialização, um passe único reexecuta o avanço de runs cujo último evento não foi consumido.

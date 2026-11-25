@@ -33,6 +33,7 @@ import { startEmbeddedPostgresTestDatabase } from "./helpers/embedded-postgres.j
 import { errorHandler } from "../middleware/error-handler.js";
 import { workflowRunRoutes } from "../routes/workflow-runs.js";
 import { assignWorkflowHumanStepAfterRelease } from "../services/workflow-run-human.js";
+import { recoverWorkflowRuns } from "../services/workflow-run-control.js";
 import { caseHandoffService } from "../services/case-handoffs.js";
 import { caseHandoffDeliveryService } from "../services/case-handoff-delivery.js";
 import { documentService } from "../services/documents.js";
@@ -94,7 +95,7 @@ describe("workflow runs with approval gates", () => {
 
   const decisionsSvc = () => decisionService(db, { wakeOriginAgent: async () => undefined });
 
-  async function fixture(options: { timeoutSec?: number; variant?: "gate" | "human" | "gateThenHuman" } = {}) {
+  async function fixture(options: { timeoutSec?: number; variant?: "gate" | "human" | "gateThenHuman" | "form" } = {}) {
     await instanceSettingsService(db).updateExperimental({ enableCases: true, enableWorkflowVersions: true });
     const companyId = randomUUID(), triage = randomUUID(), researcher = randomUUID(), publisher = randomUUID();
     await db.insert(companies).values({ id: companyId, name: "Studio", issuePrefix: `S${companyId.slice(0, 6)}` });
@@ -134,6 +135,17 @@ describe("workflow runs with approval gates", () => {
     if (options.variant === "human") {
       spec.steps = [{ ...spec.steps[0]!, outcomes: [{ key: "done", to: "review" }] }, humanReview, spec.steps[2]!] as typeof spec.steps;
       spec.steps[2] = { ...spec.steps[2]!, externalEffect: false } as (typeof spec.steps)[number];
+    }
+    if (options.variant === "form") {
+      const brief = { key: "brief", name: "Brief", type: "input_form", owner: { kind: "user", ref: "editor-user" },
+        outputs: ["brief"], outcomes: [{ key: "submitted", to: "publish" }],
+        ...(options.timeoutSec ? { limits: { timeoutSec: options.timeoutSec } } : {}),
+        questions: [
+          { id: "audience", label: "Who is the audience?", kind: "text", required: true },
+          { id: "tone", label: "Tone", kind: "single_choice", required: true, options: ["formal", "casual"] },
+        ] };
+      spec.steps = [{ ...spec.steps[0]!, outcomes: [{ key: "done", to: "brief" }] }, brief,
+        { ...spec.steps[2]!, externalEffect: false }] as typeof spec.steps;
     }
     if (options.variant === "gateThenHuman") {
       spec.steps[1] = { ...spec.steps[1]!, outcomes: [{ key: "approved", to: "review" }, { key: "changes_requested", to: "research" },
@@ -345,6 +357,47 @@ describe("workflow runs with approval gates", () => {
     expect(await stepRow(f.runId, "review")).toMatchObject({ status: "running", assigneeUserId: "editor-user" });
     expect(await taskRow(f.taskId)).toMatchObject({ assigneeUserId: "editor-user", assigneeAgentId: null });
     expect(await runRow(f.runId)).toMatchObject({ status: "waiting_human", currentStepKey: "review" });
+  });
+
+  it("waits for answers on a form step and moves on once a person submits them", async () => {
+    const f = await fixture({ variant: "form" });
+    await finishResearchAsAgent(f);
+    const submit = (actor: unknown, answers: Record<string, unknown>) => request(appAs(actor))
+      .post(`/api/workflow-runs/${f.runId}/steps/brief/submit-form`).send({ answers });
+
+    expect(await stepRow(f.runId, "brief")).toMatchObject({ status: "awaiting_input", assigneeUserId: "editor-user" });
+    expect(await runRow(f.runId)).toMatchObject({ status: "waiting_human", currentStepKey: "brief" });
+
+    const incomplete = await submit(board, { audience: "Founders" }).expect(422);
+    await submit(userActor(f.companyId, "intern-user", "viewer"), { audience: "Founders", tone: "formal" }).expect(403);
+    await submit(board, { audience: "Founders", tone: "formal" }).expect(200);
+    await submit(board, { audience: "Founders", tone: "formal" }).expect(409);
+    await deliverHandoffs();
+
+    expect(incomplete.body.details).toMatchObject({ code: "invalid_answers", missingRequired: ["tone"] });
+    const document = await documentService(db).getIssueDocumentByKey(f.taskId, "brief");
+    expect(document!.body).toContain("Founders");
+    expect(await stepRow(f.runId, "brief")).toMatchObject({ status: "completed", outcome: "submitted" });
+    expect(await runRow(f.runId)).toMatchObject({ status: "running", currentStepKey: "publish" });
+    expect(await taskRow(f.taskId)).toMatchObject({ assigneeAgentId: f.publisher });
+  });
+
+  it("waits for a person, once, when a form passes its timeout unanswered", async () => {
+    const f = await fixture({ variant: "form", timeoutSec: 3_600 });
+    await finishResearchAsAgent(f);
+    expect((await stepRow(f.runId, "brief")).dueAt).not.toBeNull();
+    await db.update(workflowRunSteps).set({ dueAt: new Date(Date.now() - 1_000) })
+      .where(and(eq(workflowRunSteps.runId, f.runId), eq(workflowRunSteps.stepKey, "brief")));
+
+    await recoverWorkflowRuns(db);
+    await recoverWorkflowRuns(db);
+
+    const after = await runRow(f.runId);
+    expect(after.statusReason).toMatch(/timed out without answers/);
+    const escalations = await db.select().from(workflowRunEvents)
+      .where(and(eq(workflowRunEvents.runId, f.runId), eq(workflowRunEvents.kind, "escalated")));
+    expect(escalations).toHaveLength(1);
+    expect(await documentService(db).getIssueDocumentByKey(f.taskId, "brief")).toBeNull();
   });
 
   it("counts a second answer to the same gate only once", async () => {

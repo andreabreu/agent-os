@@ -2,7 +2,7 @@ import { Router, type Request } from "express";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { workflowRuns, type Db } from "@paperclipai/db";
-import { cancelWorkflowRunSchema, completeWorkflowStepSchema, listWorkflowRunsSchema, startWorkflowRunSchema } from "@paperclipai/shared";
+import { cancelWorkflowRunSchema, completeWorkflowStepSchema, listWorkflowRunsSchema, startWorkflowRunSchema, submitWorkflowFormSchema } from "@paperclipai/shared";
 import { validate } from "../middleware/validate.js";
 import { notFound } from "../errors.js";
 import { assertCompanyAccess, hasCompanyAccess } from "./authz.js";
@@ -10,6 +10,7 @@ import { requireWorkflowVersionsEnabled } from "../services/workflow-versions.js
 import { workflowRunService } from "../services/workflow-runs.js";
 import { completeWorkflowStep } from "../services/workflow-run-advance.js";
 import { cancelWorkflowRun, resumeWorkflowRun } from "../services/workflow-run-control.js";
+import { submitWorkflowForm } from "../services/workflow-run-forms.js";
 
 const stepKeyParamSchema = z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/);
 
@@ -49,6 +50,12 @@ export function workflowRunRoutes(db: Db) {
     const { runId, companyId } = await runCompany(req);
     const stepKey = stepKeyParamSchema.parse(req.params.stepKey);
     res.json(await completeWorkflowStep(db, companyId, runId, stepKey, req.actor, req.body));
+  });
+
+  router.post("/workflow-runs/:id/steps/:stepKey/submit-form", validate(submitWorkflowFormSchema), async (req, res) => {
+    const { runId, companyId } = await runCompany(req);
+    const stepKey = stepKeyParamSchema.parse(req.params.stepKey);
+    res.json(await submitWorkflowForm(db, companyId, runId, stepKey, req.actor, req.body.answers));
   });
 
   router.post("/workflow-runs/:id/cancel", validate(cancelWorkflowRunSchema), async (req, res) => {

@@ -155,15 +155,15 @@ Monorepo pnpm: `packages/db`, `packages/shared`, `server`. Sem UI nesta fase. Ar
 
 ### Tests for User Story 7
 
-- [ ] T043 [P] [US7] Criar `packages/shared/src/workflow-form.test.ts` com testes (falhando) da função pura `validateFormAnswers(questions, answers)`: obrigatórias faltando listadas, escolha única com uma opção, múltipla com várias, número e data inválidos recusados, perguntas opcionais vazias aceitas
-- [ ] T044 [P] [US7] Acrescentar em `server/src/__tests__/workflow-runs-gates.integration.test.ts` os casos: a etapa abre a pergunta e o run vai a `waiting_human`; envio com obrigatória faltando recusado com `missing_required`; envio completo grava o documento do case na chave de saída e o run segue com a etapa seguinte recebendo o documento; pessoa sem autoridade recusada; `timeoutSec` escala sem preencher; cancelar cancela a pergunta; envio duplicado em paralelo vale uma vez
+- [X] T043 [P] [US7] Criar `packages/shared/src/workflow-form.test.ts` com testes (falhando) da função pura `validateFormAnswers(questions, answers)`: obrigatórias faltando listadas, escolha única com uma opção, múltipla com várias, número e data inválidos recusados, perguntas opcionais vazias aceitas
+- [X] T044 [P] [US7] Acrescentar em `server/src/__tests__/workflow-runs-gates.integration.test.ts` os casos: a etapa abre a pergunta e o run vai a `waiting_human`; envio com obrigatória faltando recusado com `missing_required`; envio completo grava o documento do case na chave de saída e o run segue com a etapa seguinte recebendo o documento; pessoa sem autoridade recusada; `timeoutSec` escala sem preencher; cancelar cancela a pergunta; envio duplicado em paralelo vale uma vez
 
 ### Implementation for User Story 7
 
-- [ ] T045 [US7] Confirmar em `server/src/services/issue-thread-interactions*.ts` se `ask_user_questions` aceita criação pelo servidor sem agente; se exigir agente, usar o agente que concluiu a etapa anterior; registrar em `research.md` (R5)
-- [ ] T046 [US7] Criar `packages/shared/src/workflow-form.ts` com `validateFormAnswers` e o mapeamento das perguntas para `selectionMode` e `required` do `ask_user_questions`; T043 deve passar
-- [ ] T047 [US7] Em `server/src/services/workflow-run-boundaries.ts`, implementar `openForm` (cria a interação, grava `interaction_id`, estado `awaiting_input`) e `submitForm` (valida, grava o documento do case na chave de saída, registra `input_submitted` e chama `advance`); expor `POST /api/workflow-runs/:id/steps/:stepKey/submit-form` em `server/src/routes/workflow-runs.ts`
-- [ ] T048 [US7] Rodar T043 e T044; tudo verde
+- [X] T045 [US7] Confirmar em `server/src/services/issue-thread-interactions*.ts` se `ask_user_questions` aceita criação pelo servidor sem agente; se exigir agente, usar o agente que concluiu a etapa anterior; registrar em `research.md` (R5)
+- [X] T046 [US7] Criar `packages/shared/src/workflow-form.ts` com `validateFormAnswers` e o mapeamento das perguntas para `selectionMode` e `required` do `ask_user_questions`; T043 deve passar
+- [X] T047 [US7] (Feito em `workflow-run-forms.ts`, sem interação `ask_user_questions`; ver R5) Em `server/src/services/workflow-run-boundaries.ts`, implementar `openForm` (cria a interação, grava `interaction_id`, estado `awaiting_input`) e `submitForm` (valida, grava o documento do case na chave de saída, registra `input_submitted` e chama `advance`); expor `POST /api/workflow-runs/:id/steps/:stepKey/submit-form` em `server/src/routes/workflow-runs.ts`
+- [X] T048 [US7] Rodar T043 e T044; tudo verde
 
 **Checkpoint**: PR 2b completo (US2, US3, US4 e US7)
 

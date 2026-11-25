@@ -22,6 +22,7 @@ function isRunnableNow(step: WorkflowStep) {
   if (step.type === "agent_task") return step.owner.kind === "agent";
   if (step.type === "approval_gate") return step.owner.kind === "user" || step.owner.kind === "role";
   if (step.type === "human_task") return step.owner.kind === "user";
+  if (step.type === "input_form") return step.owner.kind === "user" || step.owner.kind === "role";
   return false;
 }
 const RECENT_EVENT_LIMIT = 50;

@@ -26,6 +26,7 @@ export const workflowRunSteps = pgTable(
     comment: text("comment"),
     openedAt: timestamp("opened_at", { withTimezone: true }).notNull().defaultNow(),
     closedAt: timestamp("closed_at", { withTimezone: true }),
+    dueAt: timestamp("due_at", { withTimezone: true }),
   },
   (table) => ({
     runStepAttemptUq: uniqueIndex("workflow_run_steps_run_step_attempt_uq").on(table.runId, table.stepKey, table.attempt),
