@@ -86,6 +86,7 @@ packages/db/src/schema/
 
 packages/shared/src/
 ├── workflow-spec.ts                  # novo: schema do spec e validateWorkflowGraph (puro)
+├── workflow-spec-graph.test.ts       # novo: unitário do validador
 ├── workflows.ts                      # + schemas de publicar/listar/ler versão
 ├── validators/{company,project}.ts   # + defaultExecutionPolicy
 ├── validators/issue.ts               # + schema de reassign
@@ -106,10 +107,12 @@ server/src/routes/
 ├── routine-workflow-target.ts        # novo
 ├── issue-stage-reassign.ts           # novo
 ├── companies.ts, projects.ts         # + defaultExecutionPolicy no PATCH
+
+ui/src/api/
+└── companies.ts, projects.ts         # + tipo defaultExecutionPolicy (sem tela)
 └── openapi.ts                        # + novas rotas
 
 server/src/__tests__/
-├── workflow-spec-graph.test.ts               # unitário do validador
 ├── workflow-versions.integration.test.ts     # banco real
 ├── issue-default-execution-policy.test.ts    # banco real
 ├── issue-stage-reassign.test.ts              # banco real
