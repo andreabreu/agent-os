@@ -4,7 +4,7 @@ import { MUSE_ASSET_VERSION, museStopBoundarySchema, museDetectorCleanupAttestat
 import { slackTestMessageSchema, slackTestMessageResultSchema, slackManagerAuthorizationSchema, slackSetupOptionsSchema, slackManagedProvisionSchema, slackManagedResultSchema, slackRegistrationSchema, slackSetupActionSchema, slackInstallAuthorizationSchema, slackRegistrationStateSchema, slackAppConfigurationSchema, slackAvatarStateSchema, slackAccountStateSchema } from "@paperclipai/shared";
 import { experimentalApiMetadata } from "./experimental-api-metadata.js";
 import { LINK_PREVIEW_BATCH_LIMIT, ATTENTION_SOURCE_KINDS } from "@paperclipai/shared";
-import { agentCaseHandoffSchema, caseWorkflowDocumentTextSchema, doneCaseHandoffSchema, createWorkflowSchema, updateWorkflowSchema, listWorkflowsSchema, readWorkflowQuerySchema } from "@paperclipai/shared";
+import { agentCaseHandoffSchema, caseWorkflowDocumentTextSchema, doneCaseHandoffSchema, createWorkflowSchema, updateWorkflowSchema, listWorkflowsSchema, readWorkflowQuerySchema, publishWorkflowVersionSchema, listWorkflowVersionsSchema, readWorkflowVersionQuerySchema } from "@paperclipai/shared";
 import {
   experimentalApiDocs,
   experimentalApiPaths,
@@ -14104,6 +14104,17 @@ for (const [method, path, body, summary] of [
   request: { params: path.includes("{companyId}") ? z.object({ companyId: z.string().uuid() }) : z.object({ id: z.string().uuid() }),
     ...(body ? { body: jsonBody(body) } : {}), ...(method === "get" ? { query: path.includes("{companyId}") ? listWorkflowsSchema : readWorkflowQuerySchema } : {}) },
   responses: { [method === "post" ? 201 : 200]: r.ok(), 400: r.badRequest, 401: r.unauthorized, 403: r.forbidden, 404: r.notFound, 409: r.conflict } });
+
+const WORKFLOW_VERSIONS_DESCRIPTION = "Requires enableCases, enableWorkflowVersions and company access. A published version is immutable: there is no update or delete route, and a change means publishing the next version. Versions are numbered sequentially per workflow. Version reads return an ETag with the spec's SHA-256 fingerprint; pass it as snapshot to reject a changed read with 409. Archived workflows refuse new versions with 409.";
+for (const [method, path, body, query, summary, status] of [
+  ["post", "/api/workflows/{id}/versions", publishWorkflowVersionSchema, undefined, "Publish the next immutable version of a workflow", 201],
+  ["get", "/api/workflows/{id}/versions", undefined, listWorkflowVersionsSchema, "List a workflow's published versions without their specs", 200],
+  ["get", "/api/workflows/{id}/versions/{version}", undefined, readWorkflowVersionQuerySchema, "Read one published workflow version with its spec", 200],
+  ["post", "/api/workflows/{id}/archive", undefined, undefined, "Archive a workflow so it receives no new versions", 200],
+] as const) registry.registerPath({ method, path, tags: ["Cases"], summary, description: WORKFLOW_VERSIONS_DESCRIPTION,
+  request: { params: path.includes("{version}") ? z.object({ id: z.string().uuid(), version: z.number().int().positive() }) : z.object({ id: z.string().uuid() }),
+    ...(body ? { body: jsonBody(body) } : {}), ...(query ? { query } : {}) },
+  responses: { [status]: r.ok(), 400: r.badRequest, 401: r.unauthorized, 403: r.forbidden, 404: r.notFound, 409: r.conflict } });
 
 for (const [method, path, body] of experimentalApiPaths) {
   const query = experimentalApiQueries[`${method.toUpperCase()} ${path}`];

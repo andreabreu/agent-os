@@ -17,6 +17,7 @@ const apiPrefixes: Record<string, string> = {
   "cases.ts": "/api",
   "case-handoffs.ts": "/api",
   "workflows.ts": "/api",
+  "workflow-versions.ts": "/api",
   "smoke-lab.ts": "/api",
   "access.ts": "/api",
   "activity.ts": "/api",

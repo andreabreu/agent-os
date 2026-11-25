@@ -57,7 +57,7 @@ Levantamento feito no `master` (`1a57a2abec`) e nas PRs upstream #15267 e #15265
 
 - **Decisão**: acrescentar `list_workflow_versions` e `read_workflow_version` em `native-workflow-tools.ts`, somente leitura, com a mesma paginação por `snapshot` de `read_workflow`. Escrita (publicar) só por REST, via `authorizeCaseCreation`.
 - **Racional**: FR-007 pede leitura para agentes; publicar uma versão imutável por agente é decisão de governança que deixamos para depois.
-- **A confirmar**: os catálogos gerados (`runner-api-catalog.ts`, `semantic-tool-contracts.json`) exigem regeneração; seguir o procedimento do repositório.
+- **Revisado na implementação (T016)**: os agentes já têm as ferramentas nativas genéricas `search_api` e `call_api`, cujo catálogo é derivado do OpenAPI (`buildRunnerApiCatalog`). Documentar as rotas de versão no `openapi.ts` as torna encontráveis e chamáveis pelos agentes, sem tocar o pacote do Runner. Ferramentas dedicadas (`list_workflow_versions`, `read_workflow_version`) exigiriam mexer em cerca de 25 arquivos do Runner (ações de protocolo, tipos semânticos, discovery, dispatcher, cobertura e catálogos gerados), com alto custo de merge para um fork; ficam como melhoria futura. Um teste de integração confirma que `search_api` encontra as rotas.
 
 ## R9. Estratégia de testes
 

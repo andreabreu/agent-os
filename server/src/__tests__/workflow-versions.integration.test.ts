@@ -11,6 +11,7 @@ import { workflowVersionRoutes } from "../routes/workflow-versions.js";
 import { instanceSettingsService } from "../services/instance-settings.js";
 import { workflowService } from "../services/workflows.js";
 import { workflowVersionService } from "../services/workflow-versions.js";
+import { runnerApiCatalog, searchRunnerApi } from "../services/native-runtime/runner-api-catalog.js";
 
 const board = { type: "board" as const, source: "local_implicit" as const };
 
@@ -166,6 +167,19 @@ describe("workflow versions", () => {
     const logged = await db.select().from(activityLog)
       .where(and(eq(activityLog.entityId, workflowId), eq(activityLog.action, "workflow.archived")));
     expect(logged).toHaveLength(1);
+  });
+
+  it("lets agents find and call the version routes through the generic API tools", () => {
+    const operations = runnerApiCatalog().map((operation) => `${operation.method.toUpperCase()} ${operation.path}`);
+    const found = JSON.stringify(searchRunnerApi({ query: "read published workflow version spec" }));
+
+    expect(operations).toEqual(expect.arrayContaining([
+      "GET /api/workflows/{id}/versions",
+      "GET /api/workflows/{id}/versions/{version}",
+      "POST /api/workflows/{id}/versions",
+      "POST /api/workflows/{id}/archive",
+    ]));
+    expect(found).toContain("/api/workflows/{id}/versions");
   });
 
   it("rejects a malformed spec before storing anything", async () => {
