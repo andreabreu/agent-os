@@ -27,9 +27,9 @@ Monorepo pnpm: `packages/db`, `packages/shared`, `server`. Sem UI nesta fase. Ar
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 Confirmar que a spec 001 está implementada nesta branch: existência de `workflow_versions`, `validateWorkflowGraph`, flag `enableWorkflowVersions` e `routine_workflow_targets`; se faltar algo, parar e implementar a spec 001 antes. Garantir `node_modules` (`node scripts/agent-preflight.mjs`, `pnpm install`) e o comando `pnpm exec vitest run <arquivo>`
-- [ ] T002 [P] Em `packages/shared/src/workflow-spec.test.ts`, escrever testes (falhando) para os campos novos de etapa: `outputs`, `externalEffect`, `timeoutSec` (60 a 2.592.000), `reminderAfterSec`, `commentRequiredOn`, `questions` (1 a 20, `kind` em `text`, `single_choice`, `multi_choice`, `number`, `date`) e os tipos `human_task`, `approval_gate`, `input_form`; versão `specVersion: 1` já publicada continua válida
-- [ ] T003 Estender `packages/shared/src/workflow-spec.ts` com os campos e tipos de etapa de `contracts/workflow-step-spec.md`, de forma aditiva e opcional
+- [X] T001 Confirmar que a spec 001 está implementada nesta branch: existência de `workflow_versions`, `validateWorkflowGraph`, flag `enableWorkflowVersions` e `routine_workflow_targets`; se faltar algo, parar e implementar a spec 001 antes. Garantir `node_modules` (`node scripts/agent-preflight.mjs`, `pnpm install`) e o comando `pnpm exec vitest run <arquivo>`
+- [X] T002 [P] Em `packages/shared/src/workflow-spec.test.ts`, escrever testes (falhando) para os campos novos de etapa: `outputs`, `externalEffect`, `timeoutSec` (60 a 2.592.000), `reminderAfterSec`, `commentRequiredOn`, `questions` (1 a 20, `kind` em `text`, `single_choice`, `multi_choice`, `number`, `date`) e os tipos `human_task`, `approval_gate`, `input_form`; versão `specVersion: 1` já publicada continua válida
+- [X] T003 Estender `packages/shared/src/workflow-spec.ts` com os campos e tipos de etapa de `contracts/workflow-step-spec.md`, de forma aditiva e opcional
 
 ---
 
@@ -39,8 +39,8 @@ Monorepo pnpm: `packages/db`, `packages/shared`, `server`. Sem UI nesta fase. Ar
 
 **⚠️ CRITICAL**: nenhuma história começa antes de T013
 
-- [ ] T004 [P] Em `packages/shared/src/workflow-spec-graph.test.ts`, escrever testes (falhando) para os códigos novos de `contracts/workflow-step-spec.md`: `external_effect_without_gate`, `gate_without_agent_origin`, `timeout_out_of_range`, `form_without_questions`, `output_key_conflict`, mais aceitação de casos válidos
-- [ ] T005 Implementar as cinco regras novas em `validateWorkflowGraph` (`packages/shared/src/workflow-spec.ts`) e a função `isExecutableWorkflowSpec(spec)` (só tipos suportados e regras cumpridas)
+- [X] T004 [P] Em `packages/shared/src/workflow-spec-graph.test.ts`, escrever testes (falhando) para os códigos novos de `contracts/workflow-step-spec.md`: `external_effect_without_gate`, `gate_without_agent_origin`, `timeout_out_of_range`, `form_without_questions`, `output_key_conflict`, mais aceitação de casos válidos
+- [X] T005 Implementar as cinco regras novas em `validateWorkflowGraph` (`packages/shared/src/workflow-spec.ts`) e a função `isExecutableWorkflowSpec(spec)` (só tipos suportados e regras cumpridas)
 - [ ] T006 [P] Criar `packages/db/src/schema/workflow_runs.ts` conforme `data-model.md`: colunas, `status` nos seis valores, `state_version` inteiro padrão 1, índice único parcial `(case_id)` onde `status IN ('running','waiting_human','paused')`, índices `(company_id, status)` e `(company_id, workflow_id, created_at)`
 - [ ] T007 [P] Criar `packages/db/src/schema/workflow_run_steps.ts` conforme `data-model.md`: `status` nos dez valores, `attempt` inteiro, `output_revision_ids` jsonb, índice único `(run_id, step_key, attempt)`, índices parciais em `decision_id` e `interaction_id`
 - [ ] T008 [P] Criar `packages/db/src/schema/workflow_run_events.ts` conforme `data-model.md` com índice único `(run_id, event_key)` e `kind` nos quinze valores listados

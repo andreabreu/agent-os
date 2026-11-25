@@ -1,7 +1,8 @@
 import { z } from "zod";
 
 export const WORKFLOW_SPEC_VERSION = 1 as const;
-export const WORKFLOW_STEP_TYPES = ["agent_task", "human_task", "approval_gate"] as const;
+export const WORKFLOW_STEP_TYPES = ["agent_task", "human_task", "approval_gate", "input_form"] as const;
+export const WORKFLOW_FORM_QUESTION_KINDS = ["text", "single_choice", "multi_choice", "number", "date"] as const;
 export const WORKFLOW_STEP_OWNER_KINDS = ["agent", "user", "role"] as const;
 export const WORKFLOW_END_DESTINATION = "end" as const;
 
@@ -9,6 +10,9 @@ const MAX_STEPS = 100;
 const MAX_STEP_LINKS = 50;
 const MAX_OUTCOMES = 20;
 const MAX_TIMEOUT_SECONDS = 2_592_000;
+const MIN_WAIT_SECONDS = 60;
+const MAX_FORM_QUESTIONS = 20;
+const MAX_QUESTION_OPTIONS = 50;
 const STEP_KEY_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/;
 
 export type WorkflowStepType = (typeof WORKFLOW_STEP_TYPES)[number];
@@ -36,6 +40,24 @@ export const workflowStepLimitsSchema = z.object({
   timeoutSec: z.number().int().positive().max(MAX_TIMEOUT_SECONDS).optional(),
 }).strict();
 
+const choiceKinds: readonly string[] = ["single_choice", "multi_choice"];
+
+export const workflowFormQuestionSchema = z.object({
+  id: stepKeySchema,
+  label: z.string().trim().min(1).max(240),
+  kind: z.enum(WORKFLOW_FORM_QUESTION_KINDS),
+  required: z.boolean().default(false),
+  options: z.array(z.string().trim().min(1).max(200)).min(1).max(MAX_QUESTION_OPTIONS).optional(),
+}).strict().superRefine((question, ctx) => {
+  const isChoice = choiceKinds.includes(question.kind);
+  if (isChoice && !question.options) {
+    ctx.addIssue({ code: "custom", path: ["options"], message: `Question "${question.id}" needs options` });
+  }
+  if (!isChoice && question.options) {
+    ctx.addIssue({ code: "custom", path: ["options"], message: `Question "${question.id}" only takes options when it is a choice` });
+  }
+});
+
 export const workflowStepSchema = z.object({
   key: stepKeySchema,
   name: z.string().trim().min(1).max(200),
@@ -47,6 +69,11 @@ export const workflowStepSchema = z.object({
   inputs: z.array(stepKeySchema).max(MAX_STEP_LINKS).default([]),
   outcomes: z.array(workflowStepOutcomeSchema).max(MAX_OUTCOMES).default([]),
   limits: workflowStepLimitsSchema.default({}),
+  outputs: z.array(stepKeySchema).max(MAX_STEP_LINKS).default([]),
+  externalEffect: z.boolean().default(false),
+  reminderAfterSec: z.number().int().min(MIN_WAIT_SECONDS).max(MAX_TIMEOUT_SECONDS).optional(),
+  commentRequiredOn: z.array(stepKeySchema).max(MAX_OUTCOMES).optional(),
+  questions: z.array(workflowFormQuestionSchema).max(MAX_FORM_QUESTIONS).optional(),
 }).strict();
 
 export const workflowSpecSchema = z.object({
@@ -57,6 +84,7 @@ export const workflowSpecSchema = z.object({
 
 export type WorkflowStep = z.infer<typeof workflowStepSchema>;
 export type WorkflowSpec = z.infer<typeof workflowSpecSchema>;
+export type WorkflowFormQuestion = z.infer<typeof workflowFormQuestionSchema>;
 
 export const WORKFLOW_GRAPH_ISSUE_CODES = [
   "duplicate_step_key",
@@ -66,6 +94,11 @@ export const WORKFLOW_GRAPH_ISSUE_CODES = [
   "unreachable_step",
   "no_path_to_end",
   "unbounded_cycle",
+  "external_effect_without_gate",
+  "gate_without_agent_origin",
+  "timeout_out_of_range",
+  "form_without_questions",
+  "output_key_conflict",
 ] as const;
 
 export type WorkflowGraphIssueCode = (typeof WORKFLOW_GRAPH_ISSUE_CODES)[number];
@@ -216,5 +249,81 @@ export function validateWorkflowGraph(spec: WorkflowSpec): WorkflowGraphIssue[] 
     issues.push({ code: "unbounded_cycle", stepKey: key,
       message: `Step "${key}" is in a loop where no step declares maxAttempts or maxReviewRounds` });
   }
+  issues.push(...executionIssues(spec, byKey, graph));
   return issues;
+}
+
+function externalEffectIssues(spec: WorkflowSpec, byKey: Map<string, WorkflowStep>, graph: Graph): WorkflowGraphIssue[] {
+  const issues: WorkflowGraphIssue[] = [];
+  for (const step of byKey.values()) {
+    if (!step.externalEffect) continue;
+    const ungatedPredecessor = [...graph].some(([key, destinations]) =>
+      destinations.includes(step.key) && byKey.get(key)!.type !== "approval_gate");
+    if (step.key === spec.start || ungatedPredecessor) {
+      issues.push({ code: "external_effect_without_gate", stepKey: step.key,
+        message: `Step "${step.key}" has an external effect but some path reaches it without an approval gate right before it` });
+    }
+  }
+  return issues;
+}
+
+// A gate decision needs an agent as its origin, so every path to a gate must
+// pass through an agent step first. Walk from the start without crossing one.
+function gatesWithoutAgentOrigin(spec: WorkflowSpec, byKey: Map<string, WorkflowStep>, graph: Graph): WorkflowGraphIssue[] {
+  const flagged = new Set<string>();
+  const seen = new Set<string>();
+  const pending = [spec.start];
+  while (pending.length > 0) {
+    const key = pending.pop()!;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const step = byKey.get(key)!;
+    if (step.type === "agent_task") continue;
+    if (step.type === "approval_gate") flagged.add(key);
+    pending.push(...graph.get(key)!);
+  }
+  return [...flagged].map((stepKey) => ({ code: "gate_without_agent_origin" as const, stepKey,
+    message: `Approval gate "${stepKey}" can be reached without any agent step before it` }));
+}
+
+function stepShapeIssues(byKey: Map<string, WorkflowStep>): WorkflowGraphIssue[] {
+  const issues: WorkflowGraphIssue[] = [];
+  const outputOwners = new Map<string, string>();
+  for (const step of byKey.values()) {
+    const waitsForPeople = step.type === "approval_gate" || step.type === "input_form";
+    const timeout = step.limits.timeoutSec;
+    if (waitsForPeople && timeout !== undefined && (timeout < MIN_WAIT_SECONDS || timeout > MAX_TIMEOUT_SECONDS)) {
+      issues.push({ code: "timeout_out_of_range", stepKey: step.key,
+        message: `Step "${step.key}" timeoutSec must be between ${MIN_WAIT_SECONDS} and ${MAX_TIMEOUT_SECONDS}` });
+    }
+    if (step.type === "input_form" && !step.questions?.length) {
+      issues.push({ code: "form_without_questions", stepKey: step.key, message: `Form step "${step.key}" declares no questions` });
+    }
+    for (const output of step.outputs) {
+      const owner = outputOwners.get(output);
+      if (owner) {
+        issues.push({ code: "output_key_conflict", stepKey: step.key,
+          message: `Step "${step.key}" declares output "${output}", already declared by step "${owner}"` });
+      } else {
+        outputOwners.set(output, step.key);
+      }
+    }
+  }
+  return issues;
+}
+
+function executionIssues(spec: WorkflowSpec, byKey: Map<string, WorkflowStep>, graph: Graph) {
+  return [
+    ...externalEffectIssues(spec, byKey, graph),
+    ...gatesWithoutAgentOrigin(spec, byKey, graph),
+    ...stepShapeIssues(byKey),
+  ];
+}
+
+/**
+ * Whether a version can be run: every step type is supported and the graph passes every rule.
+ * @param spec A definition that already passed the schema
+ */
+export function isExecutableWorkflowSpec(spec: WorkflowSpec): boolean {
+  return validateWorkflowGraph(spec).length === 0;
 }

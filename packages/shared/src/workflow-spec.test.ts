@@ -58,7 +58,58 @@ describe("workflowSpecSchema", () => {
   });
 
   it("lists exactly the step types supported in this phase", () => {
-    expect([...WORKFLOW_STEP_TYPES]).toEqual(["agent_task", "human_task", "approval_gate"]);
+    expect([...WORKFLOW_STEP_TYPES]).toEqual(["agent_task", "human_task", "approval_gate", "input_form"]);
+  });
+
+  it("accepts the execution fields of a step", () => {
+    const spec = structuredClone(validSpec) as Record<string, unknown> & { steps: Record<string, unknown>[] };
+    spec.steps[0] = { ...spec.steps[0], outputs: ["research-notes"], externalEffect: false };
+    spec.steps[1] = { ...spec.steps[1], limits: { maxReviewRounds: 3, timeoutSec: 86_400 }, reminderAfterSec: 3_600,
+      commentRequiredOn: ["changes_requested"] };
+
+    const parsed = workflowSpecSchema.parse(spec);
+
+    expect(parsed.steps[0]).toMatchObject({ outputs: ["research-notes"], externalEffect: false });
+    expect(parsed.steps[1]).toMatchObject({ reminderAfterSec: 3_600, commentRequiredOn: ["changes_requested"] });
+  });
+
+  it("defaults outputs to none and external effect to false", () => {
+    const parsed = workflowSpecSchema.parse(validSpec);
+
+    expect(parsed.steps[0]).toMatchObject({ outputs: [], externalEffect: false });
+  });
+
+  it("accepts a form step with typed questions", () => {
+    const spec = structuredClone(validSpec) as Record<string, unknown> & { steps: Record<string, unknown>[] };
+    spec.steps.push({ key: "brief", name: "Brief", type: "input_form", owner: { kind: "user", ref: "user-1" },
+      outputs: ["brief"], outcomes: [{ key: "submitted", to: "end" }],
+      questions: [
+        { id: "audience", label: "Who is the audience?", kind: "text", required: true },
+        { id: "tone", label: "Tone", kind: "single_choice", required: false, options: ["formal", "casual"] },
+        { id: "channels", label: "Channels", kind: "multi_choice", options: ["blog", "email"] },
+        { id: "words", label: "Word count", kind: "number" },
+        { id: "due", label: "Due date", kind: "date" },
+      ] });
+
+    expect(workflowSpecSchema.safeParse(spec).success).toBe(true);
+  });
+
+  it("rejects malformed output keys, question kinds and choice questions without options", () => {
+    const badOutput = structuredClone(validSpec) as Record<string, unknown> & { steps: Record<string, unknown>[] };
+    badOutput.steps[0] = { ...badOutput.steps[0], outputs: ["Not A Key"] };
+    const badKind = structuredClone(validSpec) as Record<string, unknown> & { steps: Record<string, unknown>[] };
+    badKind.steps[0] = { ...badKind.steps[0], type: "input_form", questions: [{ id: "q", label: "Q", kind: "file" }] };
+    const noOptions = structuredClone(validSpec) as Record<string, unknown> & { steps: Record<string, unknown>[] };
+    noOptions.steps[0] = { ...noOptions.steps[0], type: "input_form", questions: [{ id: "q", label: "Q", kind: "single_choice" }] };
+
+    for (const spec of [badOutput, badKind, noOptions]) expect(workflowSpecSchema.safeParse(spec).success).toBe(false);
+  });
+
+  it("rejects a reminder or timeout out of range", () => {
+    const spec = structuredClone(validSpec) as Record<string, unknown> & { steps: Record<string, unknown>[] };
+    spec.steps[1] = { ...spec.steps[1], reminderAfterSec: 10 };
+
+    expect(workflowSpecSchema.safeParse(spec).success).toBe(false);
   });
 
   it.each(["router", "parallel", "join", "wait"])("rejects the %s step type as unsupported", (type) => {

@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { validateWorkflowGraph, workflowSpecSchema, type WorkflowSpec } from "./workflow-spec.js";
+import { isExecutableWorkflowSpec, validateWorkflowGraph, workflowSpecSchema, type WorkflowSpec } from "./workflow-spec.js";
 
 type StepInput = {
   key: string;
   type?: string;
   outcomes?: { key: string; to: string }[];
   inputs?: string[];
-  limits?: { maxAttempts?: number; maxReviewRounds?: number };
+  outputs?: string[];
+  externalEffect?: boolean;
+  questions?: { id: string; label: string; kind: string }[];
+  limits?: { maxAttempts?: number; maxReviewRounds?: number; timeoutSec?: number };
 };
 
 function spec(start: string, steps: StepInput[]): WorkflowSpec {
@@ -25,6 +28,90 @@ function spec(start: string, steps: StepInput[]): WorkflowSpec {
 function codes(input: WorkflowSpec) {
   return validateWorkflowGraph(input).map((issue) => `${issue.code}:${issue.stepKey}${issue.outcomeKey ? `:${issue.outcomeKey}` : ""}`);
 }
+
+const gate = (key: string, approvedTo: string, extra: Partial<StepInput> = {}): StepInput => ({
+  key, type: "approval_gate", limits: { maxReviewRounds: 3 },
+  outcomes: [{ key: "approved", to: approvedTo }, { key: "rejected", to: "end" }], ...extra,
+});
+
+describe("validateWorkflowGraph execution rules", () => {
+  it("accepts a publishing step behind an approval gate", () => {
+    const valid = spec("draft", [
+      { key: "draft", outcomes: [{ key: "done", to: "approval" }] },
+      gate("approval", "publish"),
+      { key: "publish", externalEffect: true, outcomes: [{ key: "done", to: "end" }] },
+    ]);
+
+    expect(validateWorkflowGraph(valid)).toEqual([]);
+  });
+
+  it("refuses an external-effect step that some path reaches without an approval gate", () => {
+    const invalid = spec("draft", [
+      { key: "draft", outcomes: [{ key: "done", to: "approval" }, { key: "skip", to: "publish" }] },
+      gate("approval", "publish"),
+      { key: "publish", externalEffect: true, outcomes: [{ key: "done", to: "end" }] },
+    ]);
+
+    expect(codes(invalid)).toContain("external_effect_without_gate:publish");
+  });
+
+  it("refuses an external-effect step that starts the workflow", () => {
+    const invalid = spec("publish", [{ key: "publish", externalEffect: true, outcomes: [{ key: "done", to: "end" }] }]);
+
+    expect(codes(invalid)).toContain("external_effect_without_gate:publish");
+  });
+
+  it("accepts a gate after a human review when an agent worked earlier on the path", () => {
+    const valid = spec("draft", [
+      { key: "draft", outcomes: [{ key: "done", to: "review" }] },
+      { key: "review", type: "human_task", outcomes: [{ key: "done", to: "approval" }] },
+      gate("approval", "end"),
+    ]);
+
+    expect(validateWorkflowGraph(valid)).toEqual([]);
+  });
+
+  it("refuses a gate that some path reaches without any agent step", () => {
+    const invalid = spec("brief", [
+      { key: "brief", type: "human_task", outcomes: [{ key: "done", to: "approval" }] },
+      gate("approval", "end"),
+    ]);
+
+    expect(codes(invalid)).toContain("gate_without_agent_origin:approval");
+  });
+
+  it("refuses gate and form timeouts outside one minute to thirty days", () => {
+    const invalid = spec("draft", [
+      { key: "draft", outcomes: [{ key: "done", to: "approval" }] },
+      gate("approval", "end", { limits: { maxReviewRounds: 3, timeoutSec: 30 } }),
+    ]);
+
+    expect(codes(invalid)).toContain("timeout_out_of_range:approval");
+  });
+
+  it("refuses a form step without questions", () => {
+    const invalid = spec("brief", [{ key: "brief", type: "input_form", outputs: ["brief"], outcomes: [{ key: "done", to: "end" }] }]);
+
+    expect(codes(invalid)).toContain("form_without_questions:brief");
+  });
+
+  it("refuses two steps that declare the same output", () => {
+    const invalid = spec("draft", [
+      { key: "draft", outputs: ["post"], outcomes: [{ key: "done", to: "edit" }] },
+      { key: "edit", outputs: ["post"], outcomes: [{ key: "done", to: "end" }] },
+    ]);
+
+    expect(codes(invalid)).toContain("output_key_conflict:edit");
+  });
+
+  it("calls a valid spec executable and an invalid one not", () => {
+    const valid = spec("draft", [{ key: "draft", outcomes: [{ key: "done", to: "end" }] }]);
+    const invalid = spec("brief", [{ key: "brief", type: "input_form", outcomes: [{ key: "done", to: "end" }] }]);
+
+    expect(isExecutableWorkflowSpec(valid)).toBe(true);
+    expect(isExecutableWorkflowSpec(invalid)).toBe(false);
+  });
+});
 
 describe("validateWorkflowGraph", () => {
   it("accepts a linear workflow that reaches the end", () => {
