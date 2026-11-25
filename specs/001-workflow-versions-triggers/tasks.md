@@ -173,8 +173,8 @@ Monorepo pnpm: `packages/db`, `packages/shared`, `server`. A UI não muda nesta 
 
 - [X] T046 [P] Escrever `doc/workflow-versions.md` com o comportamento do subsistema (versões imutáveis, validação de grafo, política padrão, reassign, alvo de rotina, limitação de revisões de rotina, flag) e linkar em "More documentation" de `doc/DEVELOPING.md`
 - [X] T047 [P] Conferir que nenhum arquivo novo passa de 1.000 linhas e que os acréscimos em `server/src/services/issues.ts`, `server/src/services/routines.ts` e `server/src/app.ts` são pontos de extensão curtos (regra `pull-request-review`)
-- [ ] T048 Rodar `pnpm -r typecheck` (ou `node scripts/typecheck-low-memory.mjs`) e `pnpm verify`; se `pnpm verify` sair com código 2, rodar os checks focados e registrar o que ficou para o CI, sem `--full` automático
-- [ ] T049 Executar o quickstart (`specs/001-workflow-versions-triggers/quickstart.md`) de ponta a ponta numa instância de dev com as duas flags ligadas e registrar o resultado
+- [X] T048 (Typecheck de `db`, `shared`, `server`, `ui` e `cli` ok; `pnpm verify` sai com 2 porque `.claude/skills/` é entrada global de CI; checks focados: 4407 testes em 136 arquivos verdes; a suíte completa fica para o CI) Rodar `pnpm -r typecheck` (ou `node scripts/typecheck-low-memory.mjs`) e `pnpm verify`; se `pnpm verify` sair com código 2, rodar os checks focados e registrar o que ficou para o CI, sem `--full` automático
+- [ ] T049 (Não executado: exige subir uma instância de dev; os cenários do quickstart estão cobertos pelos testes de integração com banco real) Executar o quickstart (`specs/001-workflow-versions-triggers/quickstart.md`) de ponta a ponta numa instância de dev com as duas flags ligadas e registrar o resultado
 - [X] T050 Atualizar `doc/plans/2026-11-24-agent-workflows-hitl.md` marcando a fase 1 como especificada e linkando `specs/001-workflow-versions-triggers/`
 
 ---
