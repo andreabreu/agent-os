@@ -118,7 +118,26 @@ Uma etapa marcada como tendo efeito externo (publicar, enviar, fazer deploy) só
 
 ---
 
-### User Story 7 - Lembretes e tempo de espera dos gates (Priority: P3)
+### User Story 7 - Coletar dados de uma pessoa antes de seguir (Priority: P2)
+
+Uma etapa de formulário pede dados estruturados a uma pessoa ou papel (por exemplo um briefing ou parâmetros) antes de o workflow continuar. O run espera as respostas; ao enviá-las, elas viram um documento do case que as etapas seguintes recebem como entrada.
+
+**Why this priority**: Cobre o caso comum "uma pessoa preenche o briefing e o agente continua", reaproveitando a pergunta ao humano que já existe no thread da tarefa.
+
+**Independent Test**: Rodar um workflow com uma etapa de formulário, ver o run esperar, responder como pessoa autorizada e como não autorizada, e conferir que a etapa seguinte recebe as respostas.
+
+**Acceptance Scenarios**:
+
+1. **Given** um run que chega a uma etapa de formulário, **When** a etapa começa, **Then** as perguntas declaradas aparecem para a pessoa ou papel responsável e o run passa a "esperando humano".
+2. **Given** perguntas obrigatórias sem resposta, **When** a pessoa tenta enviar, **Then** o envio é recusado listando o que falta.
+3. **Given** todas as perguntas obrigatórias respondidas, **When** a pessoa autorizada envia, **Then** as respostas são gravadas como documento do case na chave de saída da etapa e o run segue.
+4. **Given** uma pessoa sem autoridade, **When** tenta enviar as respostas, **Then** é recusada e nada muda.
+5. **Given** uma etapa de formulário com limite de tempo declarado, **When** o tempo passa sem resposta, **Then** o run fica em "esperando humano" e o responsável é avisado, sem preencher nada sozinho.
+6. **Given** o run cancelado enquanto espera respostas, **When** o cancelamento acontece, **Then** a pergunta pendente é cancelada junto.
+
+---
+
+### User Story 8 - Lembretes e tempo de espera dos gates (Priority: P3)
 
 Um gate humano aberto lembra os decisores depois do tempo configurado e o sistema mede quanto tempo cada decisão ficou esperando.
 
@@ -133,7 +152,7 @@ Um gate humano aberto lembra os decisores depois do tempo configurado e o sistem
 
 ---
 
-### User Story 8 - Resumo do que mudou entre tentativas (Priority: P3)
+### User Story 9 - Resumo do que mudou entre tentativas (Priority: P3)
 
 Quando uma etapa reentra por devolução, quem a revisa vê o que mudou nos documentos desde a tentativa anterior.
 
@@ -148,7 +167,7 @@ Quando uma etapa reentra por devolução, quem a revisa vê o que mudou nos docu
 
 ---
 
-### User Story 9 - Testar um workflow antes de publicar (Priority: P3)
+### User Story 10 - Testar um workflow antes de publicar (Priority: P3)
 
 Quem escreve um workflow pode simular um run com agentes e pessoas simulados, para ver quais caminhos, gates e ciclos o definem, sem criar tarefas, decisões nem gastar orçamento.
 
@@ -174,6 +193,8 @@ Quem escreve um workflow pode simular um run com agentes e pessoas simulados, pa
 - Gate com tempo de espera declarado e lembrete maior que o tempo: o lembrete vale só até o fim do tempo.
 - Orçamento liberado enquanto o run está pausado: o run retoma do ponto em que parou, sem repetir a etapa.
 - Servidor reiniciado com decisão resolvida e avanço pendente: o avanço acontece uma única vez.
+- Formulário com resposta enviada duas vezes ao mesmo tempo: a primeira vale, a segunda é recusada sem alterar o run.
+- Formulário sem nenhuma pergunta obrigatória e sem resposta: a etapa só conclui com o envio explícito.
 - Recurso desligado por flag no meio de runs ativos: runs ativos ficam preservados e não avançam até a flag voltar.
 - Simulação com ciclo que nunca sai: termina no limite de rodadas e reporta o escalonamento.
 
@@ -190,7 +211,7 @@ Quem escreve um workflow pode simular um run com agentes e pessoas simulados, pa
 - **FR-005**: Cada etapa DEVE declarar os documentos de saída e o sistema DEVE exigir que existam no case antes de aceitar a conclusão da etapa.
 - **FR-006**: A etapa seguinte DEVE receber referências aos documentos de entrada que declarou, sem cópia do conteúdo.
 - **FR-007**: O sistema DEVE aceitar apenas as passagens e conclusões previstas pelo workflow para a etapa atual e recusar as demais.
-- **FR-008**: O sistema DEVE manter o estado de cada etapa (pendente, pronta, em andamento, aguardando revisão, aguardando aprovação, concluída, mudanças pedidas, pulada, falha, cancelada) e do run (em andamento, esperando humano, pausado, concluído, falho, cancelado).
+- **FR-008**: O sistema DEVE manter o estado de cada etapa (pendente, pronta, em andamento, aguardando revisão, aguardando aprovação, aguardando entrada, concluída, mudanças pedidas, pulada, falha, cancelada) e do run (em andamento, esperando humano, pausado, concluído, falho, cancelado).
 - **FR-009**: Cada tentativa de etapa DEVE ser registrada separadamente com seu resultado.
 
 **Gates humanos**
@@ -223,6 +244,13 @@ Quem escreve um workflow pode simular um run com agentes e pessoas simulados, pa
 - **FR-026**: Ao reabrir uma etapa por devolução, a decisão do gate DEVE incluir o resumo das mudanças dos documentos de saída entre a tentativa anterior e a atual.
 - **FR-027**: O sistema DEVE oferecer uma simulação de workflow com respostas simuladas para agentes e gates, sem criar nada real nem acordar agentes, devolvendo o percurso e os pontos de escalonamento.
 
+**Etapa de formulário**
+
+- **FR-033**: O sistema DEVE oferecer uma etapa de formulário que declara perguntas (texto livre, escolha única, escolha múltipla, número ou data, cada uma obrigatória ou opcional) e a pessoa ou papel que responde.
+- **FR-034**: O run DEVE esperar as respostas e DEVE recusar o envio quando faltar pergunta obrigatória, listando o que falta; só a pessoa ou papel declarado e atores de gestão PODEM enviar.
+- **FR-035**: As respostas DEVEM ser gravadas como documento do case na chave de saída da etapa, disponível como entrada das etapas seguintes; a etapa NUNCA DEVE ser preenchida automaticamente.
+- **FR-036**: A etapa de formulário DEVE aceitar o mesmo limite de tempo e o mesmo lembrete dos gates humanos, escalando ao responsável sem preencher nada sozinha.
+
 **Acesso, auditoria e superfície**
 
 - **FR-028**: Toda leitura e escrita DEVE respeitar a fronteira da empresa; acesso entre empresas DEVE ser negado.
@@ -238,6 +266,7 @@ Quem escreve um workflow pode simular um run com agentes e pessoas simulados, pa
 - **Evento do run**: registro de auditoria de tudo que mudou o run, com ator e detalhes.
 - **Decisão de gate**: decisão na fila de decisões, com opções iguais às saídas da etapa, comentário, decisor e tempos de abertura e resolução.
 - **Definição de etapa (estendida)**: o que a spec 001 já define, mais documentos de saída, marca de efeito externo, limite de tempo do gate, tempo de lembrete e regra de comentário.
+- **Formulário de etapa**: conjunto de perguntas declaradas numa etapa, com tipo e obrigatoriedade, e as respostas enviadas, gravadas como documento do case.
 - **Simulação**: resultado efêmero de uma execução simulada, sem persistir trabalho real.
 
 ## Success Criteria *(mandatory)*
@@ -254,8 +283,9 @@ Quem escreve um workflow pode simular um run com agentes e pessoas simulados, pa
 - **SC-008**: 100% das versões com etapa de efeito externo sem gate anterior são recusadas na publicação.
 - **SC-009**: Uma pessoa vê a decisão de um gate na fila de decisões em até 5 segundos após a etapa chegar a ele.
 - **SC-010**: Uma simulação de um workflow de vinte etapas devolve o percurso em até 5 segundos e cria 0 tarefas, decisões e runs reais.
-- **SC-011**: Com a flag desligada, 0 rotas, ferramentas ou opções novas ficam visíveis e 100% dos workflows e rotinas da spec 001 continuam funcionando.
-- **SC-012**: Nenhum acesso entre empresas é concedido em testes de isolamento.
+- **SC-011**: 100% dos envios de formulário com pergunta obrigatória faltando são recusados, e 100% dos envios completos de pessoa autorizada viram documento do case disponível na etapa seguinte.
+- **SC-012**: Com a flag desligada, 0 rotas, ferramentas ou opções novas ficam visíveis e 100% dos workflows e rotinas da spec 001 continuam funcionando.
+- **SC-013**: Nenhum acesso entre empresas é concedido em testes de isolamento.
 
 ## Assumptions
 
@@ -266,5 +296,7 @@ Quem escreve um workflow pode simular um run com agentes e pessoas simulados, pa
 - Documentos de saída e entrada são documentos do case já existentes, identificados por chave.
 - A fila de decisões, a expiração de decisões e o acordar do agente de origem existentes são reaproveitados.
 - Tempos de lembrete e de espera usam o mecanismo existente de expiração e de trabalho por evento; nenhum polling periódico novo é criado.
+- A etapa de formulário reaproveita a pergunta estruturada ao humano que já existe no thread da tarefa; os tipos de pergunta ficam restritos aos cinco listados e as respostas viram um único documento do case.
+- A definição de etapa da spec 001 só aceitava os tipos agente, humana e gate; nesta spec o tipo formulário é acrescentado de forma aditiva.
 - Fora de escopo: paralelismo e join, router, wait, editor visual, UI de run, aprovação pelo chat (fase 2c) e eventos internos como gatilho.
 - O resultado fica só no fork e não será contribuído ao upstream.
