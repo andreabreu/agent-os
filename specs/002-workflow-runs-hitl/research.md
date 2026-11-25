@@ -9,6 +9,16 @@ Levantamento no `master` (`1a57a2abec`) para a spec 002. Os itens marcados "Spik
 - **Alternativas**: o servidor inicia o handoff como "sistema" (`apply` exige `fromAgentId` igual ao responsável atual e restaura o ator original, então não há ator de sistema); só validar o `handoff_case` livre do agente (deixa a conclusão de etapa implícita e não cobre gates).
 - Handoff livre fora do fluxo, num case com run ativo, é recusado (resposta à questão de borda da spec).
 
+## R1b. Confirmado na implementação do PR 2a
+
+- **Handoff em case existente** exige `expectedHandoffVersion` e `expectedIssueStatusVersion`; o motor lê os dois na hora (`caseHandoffExpectations`).
+- **Um handoff por vez.** O serviço recusa um handoff novo enquanto o anterior não foi entregue pelo worker de entrega (`A handoff is already pending for this case`). Concluir uma etapa antes disso devolve `409` e pode ser repetido; em produção o worker entrega por evento, logo depois.
+- **Ordem na conclusão:** validar, pedir o handoff idempotente (chave `workflow-run:{runId}:{step}:{attempt}`) e só então gravar o estado do run. Se a gravação falhar, repetir reaproveita o mesmo handoff.
+- **Sem gancho depois do handoff aplicado.** A etapa seguinte é marcada `running` quando o handoff é aceito; a entrega e o wake continuam sendo do módulo de handoff. O gancho previsto no T017 ficou só com a recusa de handoff livre, num módulo próprio (`workflow-run-case-guard.ts`) para evitar import circular.
+- **Fim do run não fecha a tarefa do case.** O run fica `completed`; fechar a tarefa continua sendo decisão do agente ou da pessoa.
+- **Ferramentas de agente:** como na spec 001, os agentes usam `search_api` e `call_api` sobre as rotas documentadas no OpenAPI; não há ferramentas dedicadas no Runner.
+- **Etapas executáveis no PR 2a:** só `agent_task` com dono agente; o resto devolve `422 workflow_not_executable` até o PR 2b.
+
 ## R2. Gate de aprovação como decisão
 
 - **Decisão**: `decisionService.create` com uma opção por outcome, `continuationPolicy = none`, origem = o último agente que segurou o case e a run mais recente dele nesse case. O avanço, e não a continuação da decisão, acorda o agente da etapa seguinte pelo handoff, como pede FR-010.

@@ -135,6 +135,7 @@ import { workflowVersionRoutes } from "./routes/workflow-versions.js";
 import { defaultExecutionPolicyRoutes } from "./routes/default-execution-policy.js";
 import { issueStageReassignRoutes } from "./routes/issue-stage-reassign.js";
 import { routineWorkflowTargetRoutes } from "./routes/routine-workflow-target.js";
+import { workflowRunRoutes } from "./routes/workflow-runs.js";
 import { fileResourceRoutes } from "./routes/file-resources.js";
 import { createRemoteWorkspaceFiles } from "./services/remote-workspace-files.js";
 import { createSavedWorkspaceLoader } from "./services/remote-workspaces.js";
@@ -874,6 +875,7 @@ export async function createApp(
   api.use(defaultExecutionPolicyRoutes(db));
   api.use(issueStageReassignRoutes(db));
   api.use(routineWorkflowTargetRoutes(db));
+  api.use(workflowRunRoutes(db));
   api.use(issueTreeControlRoutes(db, { pluginWorkerManager: workerManager }));
   api.use(fileResourceRoutes(db, { remoteFiles: createRemoteWorkspaceFiles(db, {
     environmentRuntime: environmentRuntimeService(db, { pluginWorkerManager: workerManager }),

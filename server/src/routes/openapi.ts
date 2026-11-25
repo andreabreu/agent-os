@@ -4,7 +4,7 @@ import { MUSE_ASSET_VERSION, museStopBoundarySchema, museDetectorCleanupAttestat
 import { slackTestMessageSchema, slackTestMessageResultSchema, slackManagerAuthorizationSchema, slackSetupOptionsSchema, slackManagedProvisionSchema, slackManagedResultSchema, slackRegistrationSchema, slackSetupActionSchema, slackInstallAuthorizationSchema, slackRegistrationStateSchema, slackAppConfigurationSchema, slackAvatarStateSchema, slackAccountStateSchema } from "@paperclipai/shared";
 import { experimentalApiMetadata } from "./experimental-api-metadata.js";
 import { LINK_PREVIEW_BATCH_LIMIT, ATTENTION_SOURCE_KINDS } from "@paperclipai/shared";
-import { agentCaseHandoffSchema, caseWorkflowDocumentTextSchema, doneCaseHandoffSchema, createWorkflowSchema, updateWorkflowSchema, listWorkflowsSchema, readWorkflowQuerySchema, publishWorkflowVersionSchema, listWorkflowVersionsSchema, readWorkflowVersionQuerySchema, putDefaultExecutionPolicySchema, reassignIssueExecutionStageSchema, setRoutineWorkflowTargetSchema } from "@paperclipai/shared";
+import { agentCaseHandoffSchema, caseWorkflowDocumentTextSchema, doneCaseHandoffSchema, createWorkflowSchema, updateWorkflowSchema, listWorkflowsSchema, readWorkflowQuerySchema, publishWorkflowVersionSchema, listWorkflowVersionsSchema, readWorkflowVersionQuerySchema, putDefaultExecutionPolicySchema, reassignIssueExecutionStageSchema, setRoutineWorkflowTargetSchema, startWorkflowRunSchema, completeWorkflowStepSchema, listWorkflowRunsSchema } from "@paperclipai/shared";
 import {
   experimentalApiDocs,
   experimentalApiPaths,
@@ -14141,6 +14141,22 @@ for (const [method, path, summary, status] of [
 ] as const) registry.registerPath({ method, path, tags: ["Routines"], summary, description: ROUTINE_WORKFLOW_TARGET_DESCRIPTION,
   request: { params: z.object({ id: z.string().uuid() }), ...(method === "put" ? { body: jsonBody(setRoutineWorkflowTargetSchema) } : {}) },
   responses: { [status]: r.ok(), 400: r.badRequest, 401: r.unauthorized, 403: r.forbidden, 404: r.notFound, 409: r.conflict } });
+
+const WORKFLOW_RUNS_DESCRIPTION = "Requires enableCases and enableWorkflowVersions. A run executes a published workflow version on a case's primary task and stays on that version. A case holds at most one active run (409 otherwise). Each step hands the case to its owner; the owner finishes it with the complete route and one declared outcome, after saving the step's output documents on the task (422 missing_outputs otherwise). A free handoff on a case with an active run is refused. Returning to an earlier step is a new attempt; when review rounds or attempts are used up the run waits for a person (waiting_human). In this phase only agent steps run (422 workflow_not_executable otherwise). An unknown run state version returns 409 workflow_run_state_unsupported.";
+for (const [method, path, summary, status] of [
+  ["post", "/api/companies/{companyId}/workflow-runs", "Start a run of a workflow on a case", 201],
+  ["get", "/api/companies/{companyId}/workflow-runs", "List workflow runs", 200],
+  ["get", "/api/workflow-runs/{id}", "Read a workflow run with its steps and recent events", 200],
+  ["post", "/api/workflow-runs/{id}/steps/{stepKey}/complete", "Finish the current step of a workflow run with an outcome", 200],
+] as const) registry.registerPath({ method, path, tags: ["Cases"], summary, description: WORKFLOW_RUNS_DESCRIPTION,
+  request: {
+    params: path.includes("{companyId}") ? z.object({ companyId: z.string().uuid() })
+      : path.includes("{stepKey}") ? z.object({ id: z.string().uuid(), stepKey: z.string() }) : z.object({ id: z.string().uuid() }),
+    ...(path.endsWith("/complete") ? { body: jsonBody(completeWorkflowStepSchema) }
+      : method === "post" ? { body: jsonBody(startWorkflowRunSchema) } : {}),
+    ...(method === "get" && path.includes("{companyId}") ? { query: listWorkflowRunsSchema } : {}),
+  },
+  responses: { [status]: r.ok(), 400: r.badRequest, 401: r.unauthorized, 403: r.forbidden, 404: r.notFound, 409: r.conflict, 422: r.unprocessable } });
 
 for (const [method, path, body] of experimentalApiPaths) {
   const query = experimentalApiQueries[`${method.toUpperCase()} ${path}`];
