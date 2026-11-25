@@ -1101,6 +1101,89 @@ describeEmbeddedPostgres("heartbeat dependency-aware queued run selection", () =
     expect(await retryGate(replacement)).toMatchObject({ allowed: false, errorCode: "issue_dependencies_blocked" });
   });
 
+  async function seedBlockedReview(options: { pendingForReviewer: boolean }) {
+    const companyId = randomUUID();
+    const reviewerId = randomUUID();
+    const executorId = randomUUID();
+    const blockerId = randomUUID();
+    const reviewedId = randomUUID();
+    const stageId = randomUUID();
+    await db.insert(companies).values({
+      id: companyId, name: "Paperclip", issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false, defaultResponsibleUserId: "responsible-user",
+    });
+    await db.insert(companyMemberships).values({ companyId, principalType: "user", principalId: "responsible-user", status: "active", membershipRole: "member" });
+    await db.insert(agents).values([reviewerId, executorId].map((id, index) => ({
+      id, companyId, name: index === 0 ? "QAReviewer" : "CodexCoder", role: index === 0 ? "qa" : "engineer",
+      status: "active", adapterType: "codex_local", adapterConfig: {},
+      runtimeConfig: { heartbeat: { wakeOnDemand: true, maxConcurrentRuns: 1 } }, permissions: {},
+    })));
+    const executionPolicy = { mode: "normal", commentRequired: true,
+      stages: [{ id: stageId, type: "review", approvalsNeeded: 1,
+        participants: [{ id: randomUUID(), type: "agent", agentId: reviewerId, userId: null }] }] };
+    const executionState = options.pendingForReviewer ? {
+      status: "pending", currentStageId: stageId, currentStageIndex: 0, currentStageType: "review",
+      currentParticipant: { type: "agent", agentId: reviewerId, userId: null },
+      returnAssignee: { type: "agent", agentId: executorId, userId: null },
+      reviewRequest: null, completedStageIds: [], lastDecisionId: null, lastDecisionOutcome: null,
+    } : null;
+    await db.insert(issues).values([
+      { id: blockerId, companyId, title: "Open blocker", status: "todo", priority: "high", responsibleUserId: "responsible-user" },
+      { id: reviewedId, companyId, title: "Work under review", status: "in_review", priority: "medium",
+        assigneeAgentId: reviewerId, responsibleUserId: "responsible-user", executionPolicy, executionState },
+    ]);
+    await db.insert(issueRelations).values({ companyId, issueId: blockerId, relatedIssueId: reviewedId, type: "blocks" });
+    return { companyId, reviewerId, reviewedId };
+  }
+
+  function reviewWake(reviewerId: string, issueId: string) {
+    return heartbeat.wakeup(reviewerId, {
+      source: "assignment",
+      triggerDetail: "system",
+      reason: "execution_review_requested",
+      payload: { issueId, mutation: "update" },
+      contextSnapshot: { issueId, wakeReason: "execution_review_requested" },
+    });
+  }
+
+  it("admits the pending review participant of a task that is still blocked by a dependency", async () => {
+    const seeded = await seedBlockedReview({ pendingForReviewer: true });
+
+    const wake = await reviewWake(seeded.reviewerId, seeded.reviewedId);
+
+    expect(wake).not.toBeNull();
+    await heartbeat.drainActiveRunExecutions();
+    const [run] = await db.select({ status: heartbeatRuns.status }).from(heartbeatRuns).where(eq(heartbeatRuns.id, wake!.id));
+    expect(run?.status).toBe("succeeded");
+  });
+
+  it("still parks a blocked task's wake when no review stage is pending for that agent", async () => {
+    const seeded = await seedBlockedReview({ pendingForReviewer: false });
+
+    expect(await reviewWake(seeded.reviewerId, seeded.reviewedId)).toBeNull();
+  });
+
+  it("keeps an already queued review run of the pending participant on a blocked task", async () => {
+    const seeded = await seedBlockedReview({ pendingForReviewer: true });
+    const wakeupRequestId = randomUUID();
+    const runId = randomUUID();
+    await db.insert(agentWakeupRequests).values({ id: wakeupRequestId, companyId: seeded.companyId, agentId: seeded.reviewerId,
+      source: "assignment", triggerDetail: "system", reason: "execution_review_requested",
+      payload: { issueId: seeded.reviewedId }, status: "queued" });
+    await db.insert(heartbeatRuns).values({ id: runId, companyId: seeded.companyId, agentId: seeded.reviewerId,
+      invocationSource: "assignment", triggerDetail: "system", status: "queued", wakeupRequestId,
+      contextSnapshot: { issueId: seeded.reviewedId, wakeReason: "execution_review_requested" } });
+    await db.update(agentWakeupRequests).set({ runId }).where(eq(agentWakeupRequests.id, wakeupRequestId));
+
+    await heartbeat.resumeQueuedRuns();
+    await heartbeat.drainActiveRunExecutions();
+
+    const [run] = await db.select({ status: heartbeatRuns.status, errorCode: heartbeatRuns.errorCode })
+      .from(heartbeatRuns).where(eq(heartbeatRuns.id, runId));
+    expect(run?.errorCode).not.toBe("issue_dependencies_blocked");
+    expect(run?.status).toBe("succeeded");
+  });
+
   it("defers issue_blockers_resolved as a follow-up when the same issue is already running", async () => {
     const companyId = randomUUID();
     const agentId = randomUUID();

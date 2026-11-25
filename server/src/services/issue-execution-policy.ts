@@ -414,6 +414,23 @@ export function normalizeIssueExecutionPolicy(input: unknown): IssueExecutionPol
   };
 }
 
+/**
+ * Whether an agent is the active participant of the task's pending review or approval stage.
+ * Same check as upstream #21639. Reads the stored issue state, never wake context.
+ * @param issue The task's stored status and execution state
+ * @param agentId The agent being woken or claiming a run
+ */
+export function isPendingExecutionStageParticipant(
+  issue: { status?: string | null; executionState?: unknown } | null | undefined,
+  agentId: string | null | undefined,
+): boolean {
+  if (!issue || !agentId || issue.status !== "in_review") return false;
+  const state = parseIssueExecutionState(issue.executionState);
+  return state?.status === PENDING_STATUS
+    && state.currentParticipant?.type === "agent"
+    && state.currentParticipant.agentId === agentId;
+}
+
 export function parseIssueExecutionState(input: unknown): IssueExecutionState | null {
   if (input == null) return null;
   const parsed = issueExecutionStateSchema.safeParse(input);

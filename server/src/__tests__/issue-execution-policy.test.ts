@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyIssueExecutionPolicyTransition, normalizeIssueExecutionPolicy, parseIssueExecutionState, stripMonitorFromExecutionPolicy } from "../services/issue-execution-policy.ts";
+import { applyIssueExecutionPolicyTransition, isPendingExecutionStageParticipant, normalizeIssueExecutionPolicy, parseIssueExecutionState, stripMonitorFromExecutionPolicy } from "../services/issue-execution-policy.ts";
 import type { IssueExecutionPolicy, IssueExecutionState } from "@paperclipai/shared";
 import { buildExecutionPolicy } from "../../../ui/src/lib/issue-execution-policy.ts";
 
@@ -55,6 +55,29 @@ function approvalOnlyPolicy() {
     { type: "approval", participants: [{ type: "user", userId: ctoUserId }] },
   ]);
 }
+
+describe("isPendingExecutionStageParticipant", () => {
+  const stageId = "44444444-4444-4444-8444-444444444444";
+  const pendingState = {
+    status: "pending", currentStageId: stageId, currentStageIndex: 0, currentStageType: "review",
+    currentParticipant: { type: "agent", agentId: qaAgentId }, returnAssignee: { type: "agent", agentId: coderAgentId },
+    completedStageIds: [], lastDecisionId: null, lastDecisionOutcome: null,
+  };
+
+  it("recognizes the active agent participant of a pending stage on an in_review task", () => {
+    expect(isPendingExecutionStageParticipant({ status: "in_review", executionState: pendingState }, qaAgentId)).toBe(true);
+  });
+
+  it.each([
+    ["another agent", { status: "in_review", executionState: pendingState }, coderAgentId],
+    ["a task that is not in review", { status: "blocked", executionState: pendingState }, qaAgentId],
+    ["a stage awaiting changes", { status: "in_review", executionState: { ...pendingState, status: "changes_requested" } }, qaAgentId],
+    ["a task without execution state", { status: "in_review", executionState: null }, qaAgentId],
+    ["a missing task", null, qaAgentId],
+  ])("rejects %s", (_label, issue, agentId) => {
+    expect(isPendingExecutionStageParticipant(issue, agentId)).toBe(false);
+  });
+});
 
 describe("normalizeIssueExecutionPolicy", () => {
   it("returns null for null/undefined input", () => {
