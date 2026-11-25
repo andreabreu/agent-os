@@ -2,6 +2,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { cases, decisions, heartbeatRuns, workflowRunEvents, workflowRunSteps, workflowRuns, type Db } from "@paperclipai/db";
 import { isRunActive, planStepOutcome, type WorkflowSpec, type WorkflowStep } from "@paperclipai/shared";
 import { decisionService } from "./decisions.js";
+import { summarizeAttemptChanges } from "./workflow-run-diff.js";
 import { persistActivity } from "./activity-log.js";
 import type { AuthorizationActor } from "./authorization.js";
 import { readWorkflowGate, type WorkflowGateMetadata } from "./workflow-run-gate-hooks.js";
@@ -56,6 +57,7 @@ export async function openGate(db: Db, input: {
   originAgentId: string | null;
   summary: string | null;
   reopenCount?: number;
+  latestOutputs?: Record<string, string>;
 }): Promise<PreparedNextStep> {
   const [caseRow] = await db.select({ workIssueId: cases.workIssueId }).from(cases).where(eq(cases.id, input.run.caseId));
   const agentId = input.originAgentId ?? await lastAgentOfRun(db, input.run.id);
@@ -64,6 +66,7 @@ export async function openGate(db: Db, input: {
     return { kind: "blocked", reason: `Approval gate "${input.step.key}" needs an agent run on this task to open its decision` };
   }
   const timeoutMs = input.step.limits.timeoutSec ? input.step.limits.timeoutSec * 1_000 : null;
+  const changes = input.attempt > 1 ? await summarizeAttemptChanges(db, { runId: input.run.id, taskId: caseRow!.workIssueId!, latestOutputs: input.latestOutputs }) : null;
   const requiringComment = new Set(outcomesRequiringComment(input.step));
   const gate: WorkflowGateMetadata = {
     runId: input.run.id,
@@ -82,6 +85,7 @@ export async function openGate(db: Db, input: {
     body: [
       `Workflow step "${input.step.name}" (${input.step.key})${input.attempt > 1 ? `, round ${input.attempt}` : ""} needs your decision.`,
       input.summary ? `Summary from the previous step: ${input.summary}` : null,
+      changes ? `Changes since the last round:\n\n${changes}` : null,
     ].filter(Boolean).join("\n\n"),
     options: input.step.outcomes.map((outcome) => ({
       id: outcome.key,

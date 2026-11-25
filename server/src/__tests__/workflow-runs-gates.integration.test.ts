@@ -289,9 +289,12 @@ describe("workflow runs with approval gates", () => {
     expect(handoff).toMatchObject({ phase: "research", toAgentId: f.researcher });
     expect(handoff!.instructions).toContain("Add a second source");
 
+    expect(first.decision!.body).not.toContain("Changes since the last round");
     await finishResearchAsAgent(f);
     const second = await gateDecision(f.runId);
     expect(second.step).toMatchObject({ attempt: 2, status: "awaiting_approval" });
+    expect(second.decision!.body).toContain("Changes since the last round");
+    expect(second.decision!.body).toContain('Document "notes": 1 lines added, 1 removed');
     await decisionsSvc().decide({ id: second.decision!.id, optionId: "rejected", decidedByUserId: "local-implicit-board",
       userActor: board, inputValues: { comment: "Not this quarter" } });
 

@@ -216,10 +216,10 @@ Monorepo pnpm: `packages/db`, `packages/shared`, `server`. Sem UI nesta fase. Ar
 
 **Independent Test**: seção "PR 2c" do `quickstart.md`, passo 4.
 
-- [ ] T058 [P] [US9] Criar `server/src/services/workflow-run-diff.test.ts` (puro) com testes (falhando) de `summarizeDocumentChange(oldBody, newBody, { maxChars })`: linhas adicionadas, removidas, primeiras linhas alteradas, corte no limite de tamanho, corpos iguais devolvem "sem mudanças"
-- [ ] T059 [US9] Criar `server/src/services/workflow-run-diff.ts` com `summarizeDocumentChange` e `summarizeAttemptChanges(tx, step)` que compara as revisões de `output_revision_ids` da tentativa atual com a anterior usando `getIssueDocumentRevision` de `server/src/services/documents.ts`
-- [ ] T060 [US9] Em `server/src/services/workflow-run-boundaries.ts`, incluir o resumo no corpo da decisão quando `attempt > 1` e omitir na primeira tentativa; acrescentar o caso em `server/src/__tests__/workflow-runs-gates.integration.test.ts`
-- [ ] T061 [US9] Rodar T058 e o caso de T060; tudo verde
+- [X] T058 [P] [US9] Criar `server/src/services/workflow-run-diff.test.ts` (puro) com testes (falhando) de `summarizeDocumentChange(oldBody, newBody, { maxChars })`: linhas adicionadas, removidas, primeiras linhas alteradas, corte no limite de tamanho, corpos iguais devolvem "sem mudanças"
+- [X] T059 [US9] Criar `server/src/services/workflow-run-diff.ts` com `summarizeDocumentChange` e `summarizeAttemptChanges(tx, step)` que compara as revisões de `output_revision_ids` da tentativa atual com a anterior usando `getIssueDocumentRevision` de `server/src/services/documents.ts`
+- [X] T060 [US9] (Feito em `workflow-run-gates.ts`) Em `server/src/services/workflow-run-boundaries.ts`, incluir o resumo no corpo da decisão quando `attempt > 1` e omitir na primeira tentativa; acrescentar o caso em `server/src/__tests__/workflow-runs-gates.integration.test.ts`
+- [X] T061 [US9] Rodar T058 e o caso de T060; tudo verde
 
 ---
 

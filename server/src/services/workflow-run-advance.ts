@@ -104,6 +104,7 @@ export async function completeWorkflowStep(db: Db, companyId: string, runId: str
 
   const prepared = plan.kind === "advance"
     ? await prepareNextStep(db, { companyId, run, spec, plan, actor, summary: input.summary ?? null, originAgentId: current.assigneeAgentId,
+      latestOutputs: outputs.revisions,
       ...(step.type === "human_task" ? { fromHumanStep: { parkedAgentId: current.assigneeAgentId } } : {}) })
     : null;
 
@@ -157,6 +158,8 @@ export async function prepareNextStep(db: Db, input: {
   escalateHandoffFailure?: boolean;
   /** Leaving a human step: the agent that held the task before it, which gets it back for the handoff. */
   fromHumanStep?: { parkedAgentId: string | null };
+  /** Output revisions of the step finishing now, so a gate can show what changed since the last round. */
+  latestOutputs?: Record<string, string>;
 }): Promise<PreparedNextStep> {
   const next = findStep(input.spec, input.plan.stepKey);
   if (next.type === "input_form") return { kind: "form" };
@@ -167,7 +170,7 @@ export async function prepareNextStep(db: Db, input: {
   if (next.type === "approval_gate") {
     const { openGate } = await import("./workflow-run-gates.js");
     return openGate(db, { companyId: input.companyId, run: input.run, spec: input.spec, step: next,
-      attempt: input.plan.attempt, originAgentId: input.originAgentId, summary: input.summary });
+      attempt: input.plan.attempt, originAgentId: input.originAgentId, summary: input.summary, latestOutputs: input.latestOutputs });
   }
   const [workflow] = await db.select({ name: workflows.name }).from(workflows).where(eq(workflows.id, input.run.workflowId));
   const [version] = await db.select({ version: workflowVersions.version }).from(workflowVersions)
